@@ -541,6 +541,6 @@ def main():
 
     return 0 if results['status'] == 'success' else 1
 
-
+# Run the main function
 if __name__ == "__main__":
     sys.exit(main())
