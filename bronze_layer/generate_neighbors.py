@@ -93,7 +93,7 @@ def normalize_code(value):
     return code.zfill(4)
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(
         description="Create a JSON map of Norwegian municipality neighbors."
     )
@@ -118,7 +118,7 @@ def main():
         "--municipality-type", default="Kommune",
         help="Value identifying municipality polygons (default: Kommune)",
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     output = args.output or (
         args.bronze_root / DATASET / "municipality-neighbors.json"
     )

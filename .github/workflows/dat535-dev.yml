@@ -7,15 +7,23 @@ on:
     branches: [dev]
   workflow_dispatch:
 
+# Runs share persistent Bronze storage; avoid concurrent writers.
+concurrency:
+  group: dat535-dev-bronze
+  cancel-in-progress: false
+
 jobs:
   run-dev:
     name: Run Dev Pipeline
     runs-on: self-hosted
     environment: dev
+    timeout-minutes: 1200
     env:
+      FROST_CLIENT_ID: ${{ secrets.FROST_CLIENT_ID }}
       DAT535_ENV: dev
       SPARK_HOME: /opt/spark
       JAVA_HOME: /usr/lib/jvm/java-8-openjdk-amd64
+      PYTHONUNBUFFERED: "1"
 
     steps:
       - name: Checkout code
@@ -23,23 +31,35 @@ jobs:
 
       - name: Resolve output directory
         id: output-dir
-        # Persistent, non-tmp path: survives runner reboots/tmpfiles cleanup, unlike /tmp
-        run: echo "dir=$HOME/spark-lab-data/dev" >> "$GITHUB_OUTPUT"
+        # Outside the checkout so raw data and caches survive subsequent runs.
+        run: echo "dir=$HOME/dat535-project-data/dev/bronze" >> "$GITHUB_OUTPUT"
 
-      - name: Run Lab 2 & Lab 3 Pipelines
-        env:
-          DAT535_OUTPUT_DIR: ${{ steps.output-dir.outputs.dir }}
+      - name: Install dependencies
         run: |
           source ~/spark-env/bin/activate
-          mkdir -p "$DAT535_OUTPUT_DIR"
-          
-          echo "=== Running Dev Pipeline ==="
-          python $GITHUB_WORKSPACE/run_pipeline.py all
+          python -m pip install -r requirements.txt
 
-      - name: Upload Dev artifacts
+      - name: Run Bronze ingestion
+        env:
+          BRONZE_ROOT: ${{ steps.output-dir.outputs.dir }}
+        run: |
+          set -euo pipefail
+          source ~/spark-env/bin/activate
+          mkdir -p "$BRONZE_ROOT/_logs"
+          python -m bronze_layer.ingest_all --bronze-root "$BRONZE_ROOT" \
+            2>&1 | tee "$BRONZE_ROOT/_logs/dev-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.log"
+
+      - name: Upload ingestion reports and log
+        if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: dev-outputs-${{ github.run_number }}
-          path: ${{ steps.output-dir.outputs.dir }}/
+          name: dev-bronze-reports-${{ github.run_number }}-${{ github.run_attempt }}
+          # Raw archives and observations stay on the runner rather than being
+          # uploaded again as a potentially very large artifact on every run.
+          path: |
+            ${{ steps.output-dir.outputs.dir }}/_runs/*.json
+            ${{ steps.output-dir.outputs.dir }}/elhub/**/_runs/*.json
+            ${{ steps.output-dir.outputs.dir }}/frost/**/_runs/*.json
+            ${{ steps.output-dir.outputs.dir }}/_logs/dev-${{ github.run_id }}-${{ github.run_attempt }}.log
           retention-days: 7
           if-no-files-found: ignore
