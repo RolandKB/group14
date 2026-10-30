@@ -25,10 +25,6 @@ DEFAULT_BRONZE_ROOT = Path("data/bronze/elhub")
 DATE_RANGE_RE = re.compile(r"(\d{4}-\d{2}-\d{2})-to-(\d{4}-\d{2}-\d{2})")
 
 
-def utc_now():
-    return datetime.now(timezone.utc)
-
-
 def extract_advertised_period(final_url):
     """Read the advertised date range from the redirect target filename."""
     name = unquote(PurePosixPath(urlparse(final_url).path).name)
@@ -59,7 +55,7 @@ def ingest(bronze_root=DEFAULT_BRONZE_ROOT, timeout=180):
     dataset_dir = Path(bronze_root) / DATASET
     dataset_dir.mkdir(parents=True, exist_ok=True)
     run_id = str(uuid.uuid4())
-    started_at = utc_now()
+    started_at = datetime.now(timezone.utc)
     runs_dir = dataset_dir / "_runs"
     run_log = runs_dir / f"{started_at.strftime('%Y%m%dT%H%M%SZ')}_{run_id}.json"
 
@@ -110,7 +106,7 @@ def ingest(bronze_root=DEFAULT_BRONZE_ROOT, timeout=180):
         filename = f"{DATASET}_{checksum[:16]}.zip"
         destination = dataset_dir / filename
         metadata_path = dataset_dir / f"{filename}.metadata.json"
-        downloaded_at = utc_now()
+        downloaded_at = datetime.now(timezone.utc)
         expected_end = downloaded_at.date() - timedelta(days=1)
         matches_expected = period_end == expected_end if period_end is not None else None
 
@@ -163,7 +159,7 @@ def ingest(bronze_root=DEFAULT_BRONZE_ROOT, timeout=180):
 
         run_info.update({
             "status": status,
-            "finished_at_utc": utc_now().isoformat(),
+            "finished_at_utc": datetime.now(timezone.utc).isoformat(),
             "file_path": str(destination),
             "metadata_path": str(metadata_path),
             "sha256": checksum,
@@ -183,7 +179,7 @@ def ingest(bronze_root=DEFAULT_BRONZE_ROOT, timeout=180):
     except Exception as exc:
         run_info.update({
             "status": "failed",
-            "finished_at_utc": utc_now().isoformat(),
+            "finished_at_utc": datetime.now(timezone.utc).isoformat(),
             "error_type": type(exc).__name__,
             "error": str(exc),
         })
