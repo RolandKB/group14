@@ -1,2 +1,5 @@
 geopandas
 shapely
+requests
+pyspark
+findspark
