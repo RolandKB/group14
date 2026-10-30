@@ -1,0 +1,22 @@
+{
+  "source": "Geonorge",
+  "dataset": "Administrative enheter kommuner",
+  "filename": "Basisdata_0000_Norge_25833_Kommuner_GeoJSON.zip",
+  "source_filename": "Basisdata_0000_Norge_25833_Kommuner_GeoJSON.zip",
+  "source_page": "https://www.geonorge.no/",
+  "downloaded_at": "2026-10-23",
+  "geographic_coverage": "Hele landet",
+  "coordinate_reference_system": {
+    "name": "EUREF89 UTM sone 33, 2D",
+    "epsg": 25833
+  },
+  "format": "GeoJSON",
+  "user_group": "Utdanning og forskning",
+  "purpose": "Videreformidling",
+  "license": null,
+  "archive_members": [
+    "Basisdata_0000_Norge_25833_Kommuner_GeoJSON.geojson"
+  ],
+  "size_bytes": 11492114,
+  "sha256": "f4bb733477e033e16f98eb3382e35b2b95e81e0038baa8e28267277e62112735"
+}
