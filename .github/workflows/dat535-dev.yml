@@ -32,7 +32,7 @@ jobs:
       - name: Resolve output directory
         id: output-dir
         # Outside the checkout so raw data and caches survive subsequent runs.
-        run: echo "dir=$HOME/dat535-project-data/dev/bronze" >> "$GITHUB_OUTPUT"
+        run: echo "dir=$HOME/dat535-volume/dev/" >> "$GITHUB_OUTPUT"
 
       - name: Install dependencies
         run: |
@@ -41,7 +41,7 @@ jobs:
 
       - name: Run Bronze ingestion
         env:
-          BRONZE_ROOT: ${{ steps.output-dir.outputs.dir }}
+          BRONZE_ROOT: ${{ steps.output-dir.outputs.dir }}/bronze
         run: |
           set -euo pipefail
           source ~/spark-env/bin/activate
@@ -57,9 +57,9 @@ jobs:
           # Raw archives and observations stay on the runner rather than being
           # uploaded again as a potentially very large artifact on every run.
           path: |
-            ${{ steps.output-dir.outputs.dir }}/_runs/*.json
-            ${{ steps.output-dir.outputs.dir }}/elhub/**/_runs/*.json
-            ${{ steps.output-dir.outputs.dir }}/frost/**/_runs/*.json
-            ${{ steps.output-dir.outputs.dir }}/_logs/dev-${{ github.run_id }}-${{ github.run_attempt }}.log
+            ${{ steps.output-dir.outputs.dir }}/bronze/_runs/*.json
+            ${{ steps.output-dir.outputs.dir }}/bronze/elhub/**/_runs/*.json
+            ${{ steps.output-dir.outputs.dir }}/bronze/frost/**/_runs/*.json
+            ${{ steps.output-dir.outputs.dir }}/bronze/_logs/dev-${{ github.run_id }}-${{ github.run_attempt }}.log
           retention-days: 7
           if-no-files-found: ignore
