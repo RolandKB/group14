@@ -16,6 +16,7 @@ are across the same fjord.
 """
 
 import hashlib
+import logging
 import tempfile
 import zipfile
 from datetime import UTC, datetime
@@ -26,6 +27,7 @@ from shapely.strtree import STRtree
 
 from bronze_layer.bronze_common import write_json
 
+LOG = logging.getLogger(__name__)
 DEFAULT_BRONZE_ROOT = Path("data/bronze")
 DATASET = "geonorge/administrative_enheter_kommuner"
 
@@ -79,6 +81,7 @@ def generate_neighbors(
     municipality_type: str = "Kommune",
 ) -> Path:
     """Create and write a JSON map of Norwegian municipality neighbors."""
+    LOG.info("Generating municipality neighbors from %s", input_path)
     if not input_path.exists():
         raise FileNotFoundError(f"Input file not found: {input_path}")
 
@@ -177,5 +180,11 @@ def generate_neighbors(
     }
     metadata_path = output.with_name(output.name + ".metadata.json")
     write_json(metadata_path, metadata)
+    LOG.info(
+        "Wrote neighbors for %d municipalities and %d adjacency pairs to %s",
+        len(result),
+        sum(map(len, result.values())) // 2,
+        output,
+    )
 
     return output
