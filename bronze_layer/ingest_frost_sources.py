@@ -51,7 +51,7 @@ def ingest(codes=None, root=Path("data/bronze/frost/sources"), refresh=False):
                         },
                     )
                     status = "downloaded"
-                except Exception as exc:
+                except Exception as exc:  # noqa: BLE001 - continue after station-level failures
                     LOG.error("Municipality %s: %s", code, exc)
                     result[code or "NO"] = {
                         "status": "failed",

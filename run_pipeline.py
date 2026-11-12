@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 DAT535 Lab Pipeline Orchestrator
 =================================
@@ -65,7 +64,7 @@ def run_all():
     try:
         results["lab2"] = run_lab2()
         logger.info("✓ Lab 2 completed successfully")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - report one lab failure and continue
         logger.error(f"✗ Lab 2 failed: {e}")
         results["lab2"] = {"status": "failed", "error": str(e)}
 
@@ -74,7 +73,7 @@ def run_all():
         try:
             results["lab3"] = run_lab3()
             logger.info("✓ Lab 3 completed successfully")
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - report one lab failure
             logger.error(f"✗ Lab 3 failed: {e}")
             results["lab3"] = {"status": "failed", "error": str(e)}
     else:
@@ -137,7 +136,7 @@ Labs:
         else:
             return 0 if result.get("status") == "success" else 1
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - report orchestration failure
         logger.error(f"Pipeline execution failed: {e}")
         return 1
 

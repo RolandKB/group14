@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 DAT535 Lab 2: Spark Fundamentals & the Medallion Architecture Pipeline
 ========================================================================
@@ -82,7 +81,7 @@ except ImportError as e:
 class Lab2Pipeline:
     """Spark Fundamentals & Medallion Architecture Pipeline - Lab 2"""
 
-    def __init__(self, base_dir: str = None, shared_dir: str = None):
+    def __init__(self, base_dir: str | None = None, shared_dir: str | None = None):
         """Initialize the pipeline with output directories."""
         # DAT535_OUTPUT_DIR lets CI (dev/prod) redirect output to an environment-specific root
         env_root = os.environ.get("DAT535_OUTPUT_DIR")
@@ -307,7 +306,7 @@ class Lab2Pipeline:
                 if event.get("event_type") == "purchase" and event.get("total_amount"):
                     return [(event.get("category", "Unknown"), event["total_amount"])]
                 return []
-            except Exception:
+            except Exception:  # noqa: BLE001 - malformed events are skipped
                 return []
 
         category_sales_rdd = raw_rdd.flatMap(extract_purchase_info)
@@ -363,7 +362,7 @@ class Lab2Pipeline:
                 event["_bronze_status"] = "valid"
                 event["_bronze_raw_data"] = json_str
                 return event
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 - retain parse errors in Bronze data
                 return {
                     "_bronze_ingestion_time": datetime.now().isoformat(),
                     "_bronze_source": "raw_clickstream_feed",
@@ -640,8 +639,8 @@ class Lab2Pipeline:
             mapreduce_results = self.run_mapreduce_demo()
             output_paths = self.save_outputs()
 
-            bronze_df, bronze_path = self.run_bronze_layer()
-            silver_df, silver_path = self.run_silver_layer(bronze_path)
+            _bronze_df, bronze_path = self.run_bronze_layer()
+            _silver_df, silver_path = self.run_silver_layer(bronze_path)
             gold_counts = self.run_gold_layer(silver_path)
             summary = self.generate_summary()
 

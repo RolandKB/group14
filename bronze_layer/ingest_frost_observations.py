@@ -118,7 +118,7 @@ def ingest(
                         results["downloaded"] += 1
                         outcome = "downloaded"
                         record_count = len(payload["data"])
-                except Exception as exc:
+                except Exception as exc:  # noqa: BLE001 - continue after request-level failures
                     LOG.error("Observations %s %s: %s", station, first, exc)
                     results["failed"].append(
                         {

@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 DAT535 Lab 3: Advanced Spark & Production Patterns Pipeline
 ==============================================================
@@ -85,7 +84,7 @@ except ImportError as e:
 class Lab3Pipeline:
     """Advanced Spark & Production Patterns Pipeline - Lab 3"""
 
-    def __init__(self, base_dir: str = None, shared_dir: str = None):
+    def __init__(self, base_dir: str | None = None, shared_dir: str | None = None):
         """Initialize the pipeline."""
         # DAT535_OUTPUT_DIR lets CI (dev/prod) redirect output to an environment-specific root
         env_root = os.environ.get("DAT535_OUTPUT_DIR")
@@ -472,7 +471,7 @@ class Lab3Pipeline:
                 "discounted_amount", apply_discount(col("total_amount"))
             ).count()
             results["pandas_udf_time"] = time.time() - start_time
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - optional demo failure is reported
             logger.warning(f"pandas UDF demo skipped/failed: {e}")
             results["pandas_udf_time"] = None
 

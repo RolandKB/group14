@@ -136,7 +136,7 @@ def ingest(start, end, root=DEFAULT_ROOT, areas=PRICE_AREAS, refresh=False):
                         response = download(session, url)
                         payload = response.json()
                         if not isinstance(payload, list):
-                            raise ValueError("Expected a JSON list of price intervals")
+                            raise TypeError("Expected a JSON list of price intervals")
 
                         # Preserve bytes, negative prices, offsets, and native intervals.
                         body = response.content

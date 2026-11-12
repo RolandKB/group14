@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Download and version raw Elhub consumption archives in Bronze."""
 
 import hashlib
@@ -15,6 +14,8 @@ from urllib.parse import unquote, urlparse
 import requests
 
 from bronze_layer.bronze_common import write_json
+
+LOG = logging.getLogger(__name__)
 
 DATASET = "CONSUMPTION_PER_GROUP_MBA_HOUR"
 SOURCE_URL = f"https://api.elhub.no/energy-data/v0/price-areas.csv?dataset={DATASET}"
@@ -108,11 +109,11 @@ def ingest(bronze_root=DEFAULT_BRONZE_ROOT, timeout=180):
         )
 
         if period_start is None:
-            logging.warning(
+            LOG.warning(
                 "No advertised date range found in ZIP filename: %s", original_filename
             )
         elif not matches_expected:
-            logging.warning(
+            LOG.warning(
                 "Archive ends %s; expected %s (yesterday UTC). Preserving download anyway.",
                 period_end,
                 expected_end,
@@ -192,7 +193,7 @@ def ingest(bronze_root=DEFAULT_BRONZE_ROOT, timeout=180):
             }
         )
         write_json(run_log, run_info)
-        logging.error("Ingestion failed: %s", exc)
+        LOG.error("Ingestion failed: %s", exc)
         raise
     finally:
         if temp_path is not None:

@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Generate a municipality-neighbor JSON file from Kartverket GeoJSON.
 
 Input may be the downloaded .zip or an extracted .geojson file.

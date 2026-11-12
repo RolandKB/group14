@@ -77,7 +77,7 @@ def get_json(session, endpoint, params, attempts=4):
             response.raise_for_status()
             payload = RawPayload(response)
             if not isinstance(payload.get("data"), list):
-                raise ValueError("Frost response is missing a data list")
+                raise TypeError("Frost response is missing a data list")
             return payload, response.url
         except requests.RequestException as exc:
             status = exc.response.status_code if exc.response is not None else None
@@ -134,7 +134,7 @@ def cached_response(root):
         target = Path(root) / meta["response_file"]
         if hashlib.sha256(target.read_bytes()).hexdigest() == meta["sha256"]:
             return target
-    except OSError, ValueError, KeyError:
+    except (OSError, ValueError, KeyError):
         pass
     return None
 

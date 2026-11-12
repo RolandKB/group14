@@ -70,7 +70,7 @@ def ingest(
                         },
                     )
                     store_response(folder, payload, url, {"station_id": station})
-                except Exception as exc:
+                except Exception as exc:  # noqa: BLE001 - continue after station-level failures
                     LOG.error("Series for %s: %s", station, exc)
                     results[station] = {
                         "status": "failed",
