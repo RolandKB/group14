@@ -37,7 +37,7 @@ jobs:
       - name: Install dependencies
         run: |
           source ~/spark-env/bin/activate
-          python -m pip install -r requirements.txt
+          python -m pip install -e .
 
       - name: Run Bronze ingestion
         env:

@@ -3,7 +3,7 @@
 From the repository root:
 
 ```bash
-python -m pip install -r requirements.txt
+python -m pip install -e .
 python -m bronze_layer.ingest_all
 ```
 

@@ -1,7 +1,0 @@
-geopandas
-shapely
-requests
-pyspark
-findspark
-python-dotenv
-pandas
