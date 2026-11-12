@@ -1,0 +1,21 @@
+name: Format
+
+on:
+  pull_request:
+    branches: [main, dev]
+
+jobs:
+  format:
+    name: Format code
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --group dev
+
+      - name: Run code formatting
+        run: |
+          ruff format --check .
