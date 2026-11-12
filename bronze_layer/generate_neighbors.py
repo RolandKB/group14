@@ -36,25 +36,8 @@ DATASET = "geonorge/administrative_enheter_kommuner"
 
 def sha256_file(path: Path) -> str:
     """Return the SHA-256 checksum for a file without loading it all into memory."""
-    digest = hashlib.sha256()
     with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def write_json_atomic(path: Path, payload: dict) -> None:
-    """Write JSON to a temporary sibling and atomically replace the destination."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temp_path = path.with_name(path.name + f".{uuid4().hex}.tmp")
-    try:
-        with temp_path.open("w", encoding="utf-8") as handle:
-            json.dump(payload, handle, indent=2, ensure_ascii=False)
-            handle.write("\n")
-        os.replace(temp_path, path)
-    finally:
-        temp_path.unlink(missing_ok=True)
-
+        return hashlib.file_digest(handle, "sha256").hexdigest()
 
 def load_geodata(path: Path):
     """Read a GeoJSON directly or find and extract one from a ZIP archive."""
@@ -65,7 +48,6 @@ def load_geodata(path: Path):
         geojson_names = [
             name for name in archive.namelist()
             if name.lower().endswith((".geojson", ".json"))
-            and not name.startswith("__MACOSX/")
         ]
         if len(geojson_names) != 1:
             raise ValueError(
@@ -225,7 +207,10 @@ def main(argv=None):
         },
     }
     metadata_path = output.with_name(output.name + ".metadata.json")
-    write_json_atomic(metadata_path, metadata)
+    # write_json_atomic(metadata_path, metadata)metadata_path.parent.mkdir(parents=True, exist_ok=True)
+    with metadata_path.open("w", encoding="utf-8") as handle:
+        json.dump(metadata, handle, indent=2, ensure_ascii=False)
+        handle.write("\n")
 
     pair_count = sum(len(adjacent) for adjacent in result.values()) // 2
     no_neighbors = [code for code, adjacent in result.items() if not adjacent]
