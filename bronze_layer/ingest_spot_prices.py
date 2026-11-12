@@ -1,6 +1,5 @@
 """Preserve daily Hva koster strømmen spot-price responses in Bronze."""
 
-import argparse
 import hashlib
 import json
 import logging
@@ -200,32 +199,3 @@ def ingest(start, end, root=DEFAULT_ROOT, areas=PRICE_AREAS, refresh=False):
         save_manifest(root / "_runs" / f"{run_id}.json", summary)
 
     return results
-
-
-def main(argv=None):
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--start-date", default="2024-01-01")
-    parser.add_argument(
-        "--end-date", default="2026-01-01", help="Exclusive local calendar date"
-    )
-    parser.add_argument("--bronze-root", type=Path, default=DEFAULT_ROOT)
-    parser.add_argument("--areas", nargs="+", choices=PRICE_AREAS, default=PRICE_AREAS)
-    parser.add_argument(
-        "--refresh",
-        action="store_true",
-        help="Check for revisions, preserving old versions",
-    )
-    args = parser.parse_args(argv)
-    logging.basicConfig(
-        level=logging.INFO, format="%(asctime)s %(levelname)s: %(message)s"
-    )
-    results = ingest(
-        args.start_date, args.end_date, args.bronze_root, args.areas, args.refresh
-    )
-    print(json.dumps(results, indent=2))
-    if results["failed"]:
-        raise SystemExit(1)
-
-
-if __name__ == "__main__":
-    main()

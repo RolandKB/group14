@@ -175,12 +175,12 @@ def ingest(bronze_root=DEFAULT_BRONZE_ROOT, timeout=180):
             }
         )
         write_json(run_log, run_info)
-        print(f"Status: {status}")
-        print(f"Archive: {destination}")
-        print(f"Metadata: {metadata_path}")
-        print(f"Run log: {run_log}")
-        print(f"Advertised coverage: {period_start} to {period_end}")
-        print(f"Size: {size / (1024 * 1024):.2f} MiB")
+        LOG.info("Status: %s", status)
+        LOG.info("Archive: %s", destination)
+        LOG.info("Metadata: %s", metadata_path)
+        LOG.info("Run log: %s", run_log)
+        LOG.info("Advertised coverage: %s to %s", period_start, period_end)
+        LOG.info("Size: %.2f MiB", size / (1024 * 1024))
         return destination
 
     except Exception as exc:
