@@ -29,8 +29,10 @@ The workflow runs these stages in dependency order:
 6. `ingest_frost_observations`: download station/month temperature responses for
    2024-01-01 through 2026-01-01 (exclusive) by default.
 
-`frost_common.py` is a shared library, not a separate ingestion stage. Spot-price
- ingestion is still to be implemented; there is no price ingestion script in this folder.
+7. `ingest_spot_prices`: download daily spot-price responses for NO1–NO5 using
+   the same start date and exclusive end date.
+
+`frost_common.py` is a shared library, not a separate ingestion stage.
 
 All orchestrated output goes under the repository's `data/bronze`, independently
 of the working directory. Override it with `--bronze-root PATH` to separate
@@ -91,7 +93,62 @@ A running Python process must be restarted to pick up logging changes.
 `.github/workflows/dat535-dev.yml` runs the complete Bronze pipeline using the
 `dev` environment's `FROST_CLIENT_ID` secret and the runner's `~/spark-env` Python
 environment. It installs dependencies before ingestion; tests are not run by this workflow. Raw
-files persist in `~/dat535-project-data/dev/bronze`; logs and run manifests are uploaded
+files persist in `~/dat535-volume/dev/bronze`; logs and run manifests are uploaded
 as artifacts even if ingestion fails. Runs are serialized to avoid writing to
 that directory concurrently. The job allows 20 hours for the initial backfill.
 Production and the separate scheduled workflow still use their existing runners.
+
+## Spot-price ingestion
+
+Source: [Hva koster strømmen API documentation](https://www.hvakosterstrommen.no/strompris-api).
+The API requires no credentials and documents historical availability from
+2021-12-01. Prices exclude VAT and electricity support; the provider converts
+EUR prices using its exchange rate, so NOK values may differ from Nord Pool.
+Credit Hva koster strømmen when presenting these data.
+
+To download only prices for the project period, from the repository root:
+
+```bash
+.venv/bin/python -m bronze_layer.ingest_spot_prices
+```
+
+The defaults cover 2024-01-01 through 2026-01-01 (exclusive), for all five areas:
+731 days × 5 areas = 3,655 daily requests before cache reuse. This standalone
+command does not read Frost credentials or scan the existing weather data.
+
+For a small development sample:
+
+```bash
+.venv/bin/python -m bronze_layer.ingest_spot_prices \
+  --start-date 2024-01-01 --end-date 2024-01-03 \
+  --areas NO1 --bronze-root data/dev/bronze/spot_prices
+```
+
+Raw JSON is stored unchanged at:
+
+```text
+data/bronze/spot_prices/area=NO1/date=2024-01-01/
+  response_<sha256>.json
+  retrieval_<timestamp>_<id>.metadata.json
+```
+
+Metadata records the URL, retrieval time, area, requested local date, checksum,
+HTTP status, record count, and run ID. Stage summaries are stored in
+`spot_prices/_runs/`. Reruns check checksums and reuse successful responses.
+`--refresh` checks for revised responses while retaining older raw versions;
+rerun with `--refresh` again if a refresh attempt fails.
+
+Missing dates (including HTTP 404), malformed responses, and empty lists make
+the run partial and the standalone command exits nonzero. Empty lists are
+preserved but not considered a completed day. Failed dates without a successful
+cache entry are retried on the next run. Temporary HTTP/network failures receive
+bounded retries. Raw record counts are informational: Silver must validate
+interval coverage, units, and business keys rather than assuming 24 prices per day.
+Dates identify Norwegian local calendar days; timestamps, negative prices, and
+native interval durations are preserved for Silver to interpret.
+
+`ingest_all` includes prices by default. It accepts `--skip-prices`,
+`--refresh-prices`, and `--price-areas NO1 NO2`. Price failures make the overall
+run partial and cause a nonzero exit unless `--allow-partial` is used.
+The dev workflow includes the price stage automatically and uploads its run
+manifests alongside the other ingestion reports.
