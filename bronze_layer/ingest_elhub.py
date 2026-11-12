@@ -1,14 +1,13 @@
-#!/usr/bin/env python3
 """Download and version raw Elhub consumption archives in Bronze."""
 
 import hashlib
-import os
 import logging
+import os
 import re
 import tempfile
 import uuid
 import zipfile
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path, PurePosixPath
 from urllib.parse import unquote, urlparse
 
@@ -16,11 +15,10 @@ import requests
 
 from bronze_layer.bronze_common import write_json
 
+LOG = logging.getLogger(__name__)
+
 DATASET = "CONSUMPTION_PER_GROUP_MBA_HOUR"
-SOURCE_URL = (
-    "https://api.elhub.no/energy-data/v0/price-areas.csv"
-    f"?dataset={DATASET}"
-)
+SOURCE_URL = f"https://api.elhub.no/energy-data/v0/price-areas.csv?dataset={DATASET}"
 DEFAULT_BRONZE_ROOT = Path("data/bronze/elhub")
 DATE_RANGE_RE = re.compile(r"(\d{4}-\d{2}-\d{2})-to-(\d{4}-\d{2}-\d{2})")
 
@@ -32,6 +30,7 @@ def extract_advertised_period(final_url):
     if not match:
         return name, None, None
     from datetime import date
+
     start = date.fromisoformat(match.group(1))
     end = date.fromisoformat(match.group(2))
     if start > end:
@@ -43,7 +42,7 @@ def ingest(bronze_root=DEFAULT_BRONZE_ROOT, timeout=180):
     dataset_dir = Path(bronze_root) / DATASET
     dataset_dir.mkdir(parents=True, exist_ok=True)
     run_id = str(uuid.uuid4())
-    started_at = datetime.now(timezone.utc)
+    started_at = datetime.now(UTC)
     runs_dir = dataset_dir / "_runs"
     run_log = runs_dir / f"{started_at.strftime('%Y%m%dT%H%M%SZ')}_{run_id}.json"
 
@@ -60,13 +59,19 @@ def ingest(bronze_root=DEFAULT_BRONZE_ROOT, timeout=180):
         with requests.get(SOURCE_URL, stream=True, timeout=(15, timeout)) as response:
             response.raise_for_status()
             final_url = response.url
-            original_filename, period_start, period_end = extract_advertised_period(final_url)
+            original_filename, period_start, period_end = extract_advertised_period(
+                final_url
+            )
 
             # Stream bytes to disk and hash them incrementally; avoid holding ZIP in RAM.
             digest = hashlib.sha256()
             size = 0
             with tempfile.NamedTemporaryFile(
-                mode="wb", prefix=".elhub_", suffix=".download", dir=dataset_dir, delete=False
+                mode="wb",
+                prefix=".elhub_",
+                suffix=".download",
+                dir=dataset_dir,
+                delete=False,
             ) as handle:
                 temp_path = Path(handle.name)
                 for chunk in response.iter_content(chunk_size=1024 * 1024):
@@ -78,13 +83,16 @@ def ingest(bronze_root=DEFAULT_BRONZE_ROOT, timeout=180):
         if size == 0:
             raise ValueError("Elhub returned an empty download")
         if not zipfile.is_zipfile(temp_path):
-            raise ValueError("Expected a ZIP archive, but downloaded content is not a valid ZIP")
+            raise ValueError(
+                "Expected a ZIP archive, but downloaded content is not a valid ZIP"
+            )
         with zipfile.ZipFile(temp_path) as archive:
             bad_member = archive.testzip()
             if bad_member is not None:
                 raise ValueError(f"ZIP CRC validation failed for {bad_member}")
             csv_members = [
-                item.filename for item in archive.infolist()
+                item.filename
+                for item in archive.infolist()
                 if not item.is_dir() and item.filename.lower().endswith(".csv")
             ]
             if not csv_members:
@@ -94,16 +102,21 @@ def ingest(bronze_root=DEFAULT_BRONZE_ROOT, timeout=180):
         filename = f"{DATASET}_{checksum[:16]}.zip"
         destination = dataset_dir / filename
         metadata_path = dataset_dir / f"{filename}.metadata.json"
-        downloaded_at = datetime.now(timezone.utc)
+        downloaded_at = datetime.now(UTC)
         expected_end = downloaded_at.date() - timedelta(days=1)
-        matches_expected = period_end == expected_end if period_end is not None else None
+        matches_expected = (
+            period_end == expected_end if period_end is not None else None
+        )
 
         if period_start is None:
-            logging.warning("No advertised date range found in ZIP filename: %s", original_filename)
+            LOG.warning(
+                "No advertised date range found in ZIP filename: %s", original_filename
+            )
         elif not matches_expected:
-            logging.warning(
+            LOG.warning(
                 "Archive ends %s; expected %s (yesterday UTC). Preserving download anyway.",
-                period_end, expected_end,
+                period_end,
+                expected_end,
             )
 
         if destination.exists():
@@ -113,7 +126,9 @@ def ingest(bronze_root=DEFAULT_BRONZE_ROOT, timeout=180):
                 for chunk in iter(lambda: existing.read(1024 * 1024), b""):
                     existing_hash.update(chunk)
             if existing_hash.hexdigest() != checksum:
-                raise RuntimeError(f"Hash-prefix collision or modified existing file: {destination}")
+                raise RuntimeError(
+                    f"Hash-prefix collision or modified existing file: {destination}"
+                )
             status = "unchanged"
         else:
             os.replace(temp_path, destination)
@@ -132,7 +147,9 @@ def ingest(bronze_root=DEFAULT_BRONZE_ROOT, timeout=180):
             "size_bytes": size,
             "format": "zip",
             "csv_members": csv_members,
-            "advertised_period_start": period_start.isoformat() if period_start else None,
+            "advertised_period_start": period_start.isoformat()
+            if period_start
+            else None,
             "advertised_period_end": period_end.isoformat() if period_end else None,
             "period_source": "archive_filename" if period_start else None,
             "period_verified": False,
@@ -145,16 +162,18 @@ def ingest(bronze_root=DEFAULT_BRONZE_ROOT, timeout=180):
         if not metadata_path.exists():
             write_json(metadata_path, metadata)
 
-        run_info.update({
-            "status": status,
-            "finished_at_utc": datetime.now(timezone.utc).isoformat(),
-            "file_path": str(destination),
-            "metadata_path": str(metadata_path),
-            "sha256": checksum,
-            "advertised_period_start": metadata["advertised_period_start"],
-            "advertised_period_end": metadata["advertised_period_end"],
-            "period_end_matches_expected": matches_expected,
-        })
+        run_info.update(
+            {
+                "status": status,
+                "finished_at_utc": datetime.now(UTC).isoformat(),
+                "file_path": str(destination),
+                "metadata_path": str(metadata_path),
+                "sha256": checksum,
+                "advertised_period_start": metadata["advertised_period_start"],
+                "advertised_period_end": metadata["advertised_period_end"],
+                "period_end_matches_expected": matches_expected,
+            }
+        )
         write_json(run_log, run_info)
         print(f"Status: {status}")
         print(f"Archive: {destination}")
@@ -165,14 +184,16 @@ def ingest(bronze_root=DEFAULT_BRONZE_ROOT, timeout=180):
         return destination
 
     except Exception as exc:
-        run_info.update({
-            "status": "failed",
-            "finished_at_utc": datetime.now(timezone.utc).isoformat(),
-            "error_type": type(exc).__name__,
-            "error": str(exc),
-        })
+        run_info.update(
+            {
+                "status": "failed",
+                "finished_at_utc": datetime.now(UTC).isoformat(),
+                "error_type": type(exc).__name__,
+                "error": str(exc),
+            }
+        )
         write_json(run_log, run_info)
-        logging.error("Ingestion failed: %s", exc)
+        LOG.error("Ingestion failed: %s", exc)
         raise
     finally:
         if temp_path is not None:
