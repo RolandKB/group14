@@ -2,7 +2,7 @@
 """Download and version raw Elhub consumption archives in Bronze."""
 
 import hashlib
-import json
+import os
 import logging
 import re
 import tempfile

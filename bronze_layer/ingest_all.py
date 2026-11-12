@@ -1,4 +1,4 @@
-"""Run the Bronze workflow: Elhub, municipality references, and Frost temperature."""
+"""Run the Bronze workflow: Elhub, municipality references, Frost temperature, and spot prices."""
 
 import argparse
 import json
@@ -8,12 +8,13 @@ from uuid import uuid4
 
 if __package__ in (None, ''):
     import sys
-
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from bronze_layer.ingest_elhub import ingest as ingest_elhub, write_json_atomic
+from bronze_layer.ingest_elhub import ingest as ingest_elhub
+from bronze_layer.bronze_common import write_json
+from bronze_layer.ingest_spot_prices import ingest as ingest_prices, PRICE_AREAS
 from bronze_layer.discover_municipalities import discover
-from bronze_layer.generate_neighbors import main as generate_neighbors
+from bronze_layer.generate_neighbors import generate_neighbors
 from bronze_layer.ingest_frost_sources import ingest as ingest_sources
 from bronze_layer.ingest_frost_series import ingest as ingest_series
 from bronze_layer.ingest_frost_observations import ingest as ingest_observations
@@ -44,10 +45,13 @@ def main(argv=None):
     parser.add_argument('--skip-elhub', action='store_true')
     parser.add_argument('--skip-neighbors', action='store_true')
     parser.add_argument('--skip-observations', action='store_true')
+    parser.add_argument('--skip-prices', action='store_true')
 
     parser.add_argument('--refresh-sources', action='store_true')
     parser.add_argument('--refresh-series', action='store_true')
     parser.add_argument('--refresh-observations', action='store_true')
+    parser.add_argument('--refresh-prices', action='store_true')
+    parser.add_argument('--price-areas', nargs='+', choices=PRICE_AREAS, default=PRICE_AREAS)
 
     parser.add_argument(
         '--max-stations',
@@ -58,7 +62,7 @@ def main(argv=None):
     parser.add_argument(
         '--allow-partial',
         action='store_true',
-        help='Exit successfully despite failed Frost requests',
+        help='Exit successfully despite failed source requests',
     )
     args = parser.parse_args(argv)
 
@@ -120,7 +124,7 @@ def main(argv=None):
 
         if not args.skip_neighbors:
             LOG.info('Generating municipality neighbors from %s', args.geodata)
-            generate_neighbors([str(args.geodata), '--bronze-root', str(args.bronze_root)])
+            generate_neighbors(args.geodata, bronze_root=args.bronze_root)
 
         # Without a municipality archive, discover stations throughout Norway.
         codes = None
@@ -128,7 +132,7 @@ def main(argv=None):
             codes = discover(args.municipality_archive)
             if not codes:
                 raise ValueError('Municipality archive contains no municipality codes')
-            write_json_atomic(args.bronze_root / 'elhub/municipalities.json', codes)
+            write_json(args.bronze_root / 'elhub/municipalities.json', codes)
 
         # Country-wide discovery includes historical stations whose municipality
         # codes may no longer appear in the current Kartverket dataset.
@@ -167,7 +171,7 @@ def main(argv=None):
         if args.max_stations:
             eligible = eligible[:args.max_stations]
 
-        write_json_atomic(args.bronze_root / 'frost/eligible-stations.json', eligible)
+        write_json(args.bronze_root / 'frost/eligible-stations.json', eligible)
         LOG.info('%d eligible stations; downloading %d', total_eligible, len(eligible))
 
         observations = None
@@ -178,6 +182,18 @@ def main(argv=None):
                 args.end_date,
                 root=args.bronze_root / 'frost/observations',
                 refresh=args.refresh_observations,
+            )
+
+        # Prices use the same date range, with one request per area and day.
+        prices = None
+        if not args.skip_prices:
+            LOG.info('Starting spot-price ingestion')
+            prices = ingest_prices(
+                args.start_date,
+                args.end_date,
+                root=args.bronze_root / 'spot_prices',
+                areas=args.price_areas,
+                refresh=args.refresh_prices,
             )
 
         # Collect failed requests so a later run can be inspected and resumed.
@@ -203,10 +219,14 @@ def main(argv=None):
             'source_failures': source_failures,
             'series_failures': series_failures,
             'observations': observations,
+            'prices': prices,
         })
 
         failed = bool(source_failures or series_failures or not eligible)
         if observations and observations['failed']:
+            failed = True
+
+        if prices and prices['failed']:
             failed = True
 
         if failed:
@@ -221,7 +241,7 @@ def main(argv=None):
     finally:
         # Save a manifest even if a stage fails or the user interrupts the run.
         summary['finished_at_utc'] = now()
-        write_json_atomic(manifest, summary)
+        write_json(manifest, summary)
         LOG.info('Bronze run %s finished: %s; manifest=%s', run_id, summary['status'], manifest)
 
     print(json.dumps(summary, indent=2))
