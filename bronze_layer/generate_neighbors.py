@@ -37,6 +37,7 @@ def sha256_file(path: Path) -> str:
     with path.open("rb") as handle:
         return hashlib.file_digest(handle, "sha256").hexdigest()
 
+
 def load_geodata(path: Path):
     """Read a GeoJSON directly or find and extract one from a ZIP archive."""
     if path.suffix.lower() != ".zip":
@@ -44,13 +45,12 @@ def load_geodata(path: Path):
 
     with zipfile.ZipFile(path) as archive:
         geojson_names = [
-            name for name in archive.namelist()
+            name
+            for name in archive.namelist()
             if name.lower().endswith((".geojson", ".json"))
         ]
         if len(geojson_names) != 1:
-            raise ValueError(
-                f"Expected one GeoJSON file in ZIP; found {geojson_names}"
-            )
+            raise ValueError(f"Expected one GeoJSON file in ZIP; found {geojson_names}")
 
         with tempfile.TemporaryDirectory() as temp_dir:
             extracted = Path(temp_dir) / Path(geojson_names[0]).name
@@ -113,9 +113,7 @@ def generate_neighbors(
     gdf["code"] = gdf[code_column].map(normalize_code)
 
     if gdf["code"].duplicated().any():
-        duplicates = sorted(
-            gdf.loc[gdf["code"].duplicated(False), "code"].unique()
-        )
+        duplicates = sorted(gdf.loc[gdf["code"].duplicated(False), "code"].unique())
         raise ValueError(
             "Duplicate municipality polygons found for codes: "
             f"{duplicates}. Check that only municipality features are selected."
@@ -137,10 +135,7 @@ def generate_neighbors(
             if i != j and geom.touches(geometries[j]):
                 neighbors[codes[i]].add(codes[j])
 
-    result = {
-        code: sorted(neighbors[code])
-        for code in sorted(neighbors)
-    }
+    result = {code: sorted(neighbors[code]) for code in sorted(neighbors)}
 
     # Validate that every relationship is symmetric.
     asymmetric = [

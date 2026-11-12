@@ -6,8 +6,9 @@ import logging
 from pathlib import Path
 from uuid import uuid4
 
-if __package__ in (None, ''):
+if __package__ in (None, ""):
     import sys
+
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from bronze_layer.ingest_elhub import ingest as ingest_elhub
@@ -21,7 +22,9 @@ from bronze_layer.ingest_frost_observations import ingest as ingest_observations
 from bronze_layer.frost_common import PROJECT_ROOT, frost_session, now, validate_period
 
 LOG = logging.getLogger(__name__)
-DEFAULT_GEODATA = Path(__file__).resolve().parent / 'Basisdata_0000_Norge_25833_Kommuner_GeoJSON.zip'
+DEFAULT_GEODATA = (
+    Path(__file__).resolve().parent / "Basisdata_0000_Norge_25833_Kommuner_GeoJSON.zip"
+)
 
 
 def main(argv=None):
@@ -252,5 +255,5 @@ def main(argv=None):
         )
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
