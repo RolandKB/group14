@@ -9,9 +9,10 @@ if __package__ in (None, ''):
     import sys
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from bronze_layer.ingest_elhub import ingest as ingest_elhub, write_json_atomic
+from bronze_layer.bronze_common import write_json
+from bronze_layer.ingest_elhub import ingest as ingest_elhub
 from bronze_layer.discover_municipalities import discover
-from bronze_layer.generate_neighbors import main as generate_neighbors
+from bronze_layer.generate_neighbors import generate_neighbors
 from bronze_layer.ingest_frost_sources import ingest as ingest_sources
 from bronze_layer.ingest_frost_series import ingest as ingest_series
 from bronze_layer.ingest_frost_observations import ingest as ingest_observations
@@ -66,12 +67,12 @@ def main(argv=None):
             summary['elhub_archive'] = str(ingest_elhub(a.bronze_root / 'elhub'))
         if not a.skip_neighbors:
             LOG.info('Generating municipality neighbors from %s', a.geodata)
-            generate_neighbors([str(a.geodata), '--bronze-root', str(a.bronze_root)])
+            generate_neighbors(a.geodata, bronze_root=a.bronze_root)
         codes = discover(a.municipality_archive) if a.municipality_archive else None
         if codes is not None:
             if not codes:
                 raise ValueError('Municipality archive contains no municipality codes')
-            write_json_atomic(a.bronze_root / 'elhub/municipalities.json', codes)
+            write_json(a.bronze_root / 'elhub/municipalities.json', codes)
         # Country-wide discovery includes historical stations whose municipality
         # codes may no longer appear in the current Kartverket dataset.
         LOG.info('Starting Frost station discovery')
@@ -84,7 +85,7 @@ def main(argv=None):
         total_eligible = len(eligible)
         if a.max_stations:
             eligible = eligible[:a.max_stations]
-        write_json_atomic(a.bronze_root / 'frost/eligible-stations.json', eligible)
+        write_json(a.bronze_root / 'frost/eligible-stations.json', eligible)
         LOG.info('%d eligible stations; downloading %d', total_eligible, len(eligible))
         observations = None
         if not a.skip_observations:
@@ -106,7 +107,7 @@ def main(argv=None):
         raise
     finally:
         summary['finished_at_utc'] = now()
-        write_json_atomic(manifest, summary)
+        write_json(manifest, summary)
         LOG.info('Bronze run %s finished: %s; manifest=%s', run_id, summary['status'], manifest)
     print(json.dumps(summary, indent=2))
     if failed and not a.allow_partial:

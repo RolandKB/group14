@@ -16,11 +16,7 @@ point-only contacts. It does not infer adjacency just because two places
 are across the same fjord.
 """
 
-import argparse
 import hashlib
-import json
-import os
-import sys
 import tempfile
 import zipfile
 from datetime import datetime, timezone
@@ -29,6 +25,8 @@ from uuid import uuid4
 
 import geopandas as gpd
 from shapely.strtree import STRtree
+
+from bronze_layer.bronze_common import write_json
 
 DEFAULT_BRONZE_ROOT = Path("data/bronze")
 DATASET = "geonorge/administrative_enheter_kommuner"
@@ -75,76 +73,57 @@ def normalize_code(value):
     return code.zfill(4)
 
 
-def main(argv=None):
-    parser = argparse.ArgumentParser(
-        description="Create a JSON map of Norwegian municipality neighbors."
-    )
-    parser.add_argument("input", type=Path, help="Kartverket .zip or .geojson")
-    parser.add_argument(
-        "-o", "--output", type=Path,
-        help="Output JSON path (default: <bronze-root>/geonorge/administrative_enheter_kommuner/municipality-neighbors.json)",
-    )
-    parser.add_argument(
-        "--bronze-root", type=Path, default=DEFAULT_BRONZE_ROOT,
-        help="Bronze data root (default: data/bronze)",
-    )
-    parser.add_argument(
-        "--code-column", default="kommunenummer",
-        help="Municipality-code column (default: kommunenummer)",
-    )
-    parser.add_argument(
-        "--type-column", default="objtype",
-        help="Feature-type column (default: objtype)",
-    )
-    parser.add_argument(
-        "--municipality-type", default="Kommune",
-        help="Value identifying municipality polygons (default: Kommune)",
-    )
-    args = parser.parse_args(argv)
-    output = args.output or (
-        args.bronze_root / DATASET / "municipality-neighbors.json"
-    )
-
-    if not args.input.exists():
-        sys.exit(f"Input file not found: {args.input}")
+def generate_neighbors(
+    input_path: Path,
+    output: Path | None = None,
+    bronze_root: Path = DEFAULT_BRONZE_ROOT,
+    code_column: str = "kommunenummer",
+    type_column: str = "objtype",
+    municipality_type: str = "Kommune",
+) -> Path:
+    """Create and write a JSON map of Norwegian municipality neighbors."""
+    if not input_path.exists():
+        raise FileNotFoundError(f"Input file not found: {input_path}")
 
     try:
-        gdf = load_geodata(args.input)
+        gdf = load_geodata(input_path)
     except Exception as exc:
-        sys.exit(f"Could not read input dataset: {exc}")
+        raise ValueError(f"Could not read input dataset: {exc}") from exc
 
-    for column in (args.code_column, args.type_column):
+    output = output or bronze_root / DATASET / "municipality-neighbors.json"
+
+    for column in (code_column, type_column):
         if column not in gdf.columns:
-            sys.exit(
+            raise ValueError(
                 f"Required column {column!r} not found. "
                 f"Available columns: {list(gdf.columns)}"
             )
 
     # Kartverket's file contains both municipality polygons and thousands
     # of boundary-line features. Only use the municipality polygon records.
-    gdf = gdf[gdf[args.type_column] == args.municipality_type].copy()
+    gdf = gdf[gdf[type_column] == municipality_type].copy()
     gdf = gdf[gdf.geometry.notna() & ~gdf.geometry.is_empty].copy()
 
     if gdf.empty:
-        sys.exit(
-            f"No features where {args.type_column!r} == "
-            f"{args.municipality_type!r}. Check the input or options."
+        raise ValueError(
+            f"No features where {type_column!r} == "
+            f"{municipality_type!r}. Check the input or options."
         )
 
-    gdf["code"] = gdf[args.code_column].map(normalize_code)
+    gdf["code"] = gdf[code_column].map(normalize_code)
 
     if gdf["code"].duplicated().any():
         duplicates = sorted(
             gdf.loc[gdf["code"].duplicated(False), "code"].unique()
         )
-        sys.exit(
+        raise ValueError(
             "Duplicate municipality polygons found for codes: "
             f"{duplicates}. Check that only municipality features are selected."
         )
 
     # Use a projected CRS for geometry calculations.
     if gdf.crs is None:
-        sys.exit("Input has no coordinate reference system (CRS).")
+        raise ValueError("Input has no coordinate reference system (CRS).")
     gdf = gdf.to_crs("EPSG:25833")
 
     codes = gdf["code"].tolist()
@@ -171,20 +150,18 @@ def main(argv=None):
         if a not in result.get(b, [])
     ]
     if asymmetric:
-        sys.exit(f"Symmetry check failed: {asymmetric[:20]}")
+        raise ValueError(f"Symmetry check failed: {asymmetric[:20]}")
 
-    output_payload = json.dumps(result, indent=2, ensure_ascii=False) + "\n"
-    output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(output_payload, encoding="utf-8")
+    write_json(output, result)
 
     metadata = {
         "source": "Geonorge",
         "dataset": "Administrative enheter kommuner - municipality neighbors",
-        "source_file": str(args.input),
-        "source_sha256": sha256_file(args.input),
+        "source_file": str(input_path),
+        "source_sha256": sha256_file(input_path),
         "source_metadata_file": (
-            str(args.input.with_name(args.input.name + ".metadata.json"))
-            if args.input.with_name(args.input.name + ".metadata.json").exists()
+            str(input_path.with_name(input_path.name + ".metadata.json"))
+            if input_path.with_name(input_path.name + ".metadata.json").exists()
             else None
         ),
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
@@ -201,27 +178,12 @@ def main(argv=None):
             code for code, adjacent in result.items() if not adjacent
         ],
         "parameters": {
-            "code_column": args.code_column,
-            "type_column": args.type_column,
-            "municipality_type": args.municipality_type,
+            "code_column": code_column,
+            "type_column": type_column,
+            "municipality_type": municipality_type,
         },
     }
     metadata_path = output.with_name(output.name + ".metadata.json")
-    # write_json_atomic(metadata_path, metadata)metadata_path.parent.mkdir(parents=True, exist_ok=True)
-    with metadata_path.open("w", encoding="utf-8") as handle:
-        json.dump(metadata, handle, indent=2, ensure_ascii=False)
-        handle.write("\n")
+    write_json(metadata_path, metadata)
 
-    pair_count = sum(len(adjacent) for adjacent in result.values()) // 2
-    no_neighbors = [code for code, adjacent in result.items() if not adjacent]
-    print(f"Wrote {len(result)} municipalities to {output}")
-    print(f"Metadata: {metadata_path}")
-    print(f"Unique adjacency pairs: {pair_count}")
-    print(f"Symmetry check: passed")
-    if no_neighbors:
-        print(f"Warning: {len(no_neighbors)} municipalities have no neighbors: "
-              f"{', '.join(no_neighbors)}")
-
-
-if __name__ == "__main__":
-    main()
+    return output

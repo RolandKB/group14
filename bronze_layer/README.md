@@ -34,8 +34,8 @@ The workflow runs these stages in dependency order:
 
 All orchestrated output goes under the repository's `data/bronze`, independently
 of the working directory. Override it with `--bronze-root PATH` to separate
-sample and full datasets. Standalone scripts retain their own `--bronze-root`
-defaults; see their `--help` output.
+sample and full datasets. The ingestion stages are importable functions; only
+`ingest_all.py` is a command-line script.
 
 For a development run:
 

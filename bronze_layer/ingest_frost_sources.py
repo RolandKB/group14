@@ -1,5 +1,4 @@
 """Retrieve raw Frost station metadata for Norway or selected municipalities."""
-import argparse
 import json
 import logging
 from pathlib import Path
@@ -38,19 +37,3 @@ def ingest(codes=None, root=Path('data/bronze/frost/sources'), refresh=False):
             LOG.info('%s: %s (%d stations)', code, status, len(ids))
     write_run(root, result)
     return result
-
-
-def main():
-    p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument('--municipalities-json', type=Path, help='JSON list of Elhub codes (default: all Norway)')
-    p.add_argument('--bronze-root', type=Path, default=Path('data/bronze/frost/sources'))
-    p.add_argument('--refresh', action='store_true')
-    a = p.parse_args()
-    logging.basicConfig(level=logging.INFO)
-    result = ingest(json.loads(a.municipalities_json.read_text()) if a.municipalities_json else None, a.bronze_root, a.refresh)
-    print(json.dumps({k: v['status'] for k, v in result.items()}, indent=2))
-    if any(v['status'] == 'failed' for v in result.values()):
-        raise SystemExit(1)
-
-if __name__ == '__main__':
-    main()

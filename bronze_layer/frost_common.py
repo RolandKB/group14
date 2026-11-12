@@ -10,7 +10,7 @@ from uuid import uuid4
 import requests
 from dotenv import load_dotenv
 
-from bronze_layer.ingest_elhub import write_json_atomic
+from bronze_layer.bronze_common import write_json
 
 BASE = 'https://frost.met.no'
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -95,7 +95,7 @@ def store_response(root: Path, payload, url, extra=None):
             'run_id': run_id, 'status': 'empty' if payload.http_status in (404, 412) or not payload.get('data') else 'success',
             'http_status': payload.http_status, **(extra or {})}
     stamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
-    write_json_atomic(root / f'retrieval_{stamp}_{run_id}.metadata.json', meta)
+    write_json(root / f'retrieval_{stamp}_{run_id}.metadata.json', meta)
     return target
 
 
@@ -116,6 +116,6 @@ def cached_response(root):
 
 def write_run(root, results):
     run_id = uuid4().hex
-    write_json_atomic(Path(root) / '_runs' / f'{run_id}.json', {
+    write_json(Path(root) / '_runs' / f'{run_id}.json', {
         'run_id': run_id, 'finished_at_utc': now(), 'results': results,
     })

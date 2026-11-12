@@ -1,5 +1,4 @@
 """Download monthly Frost air-temperature observations for selected stations."""
-import argparse
 import json
 import logging
 import time
@@ -90,21 +89,3 @@ def ingest(station_ids, start, end, root=Path('data/bronze/frost/observations'),
              results['empty'], len(results['failed']))
     write_run(root, results)
     return results
-
-
-def main():
-    p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument('--stations-json', type=Path, required=True)
-    p.add_argument('--start-date', required=True)
-    p.add_argument('--end-date', required=True, help='Exclusive end date')
-    p.add_argument('--bronze-root', type=Path, default=Path('data/bronze/frost/observations'))
-    p.add_argument('--refresh', action='store_true')
-    a = p.parse_args()
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s: %(message)s')
-    result = ingest(json.loads(a.stations_json.read_text()), a.start_date, a.end_date, a.bronze_root, a.refresh)
-    print(json.dumps(result, indent=2))
-    if result['failed']:
-        raise SystemExit(1)
-
-if __name__ == '__main__':
-    main()

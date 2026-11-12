@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
 """Download and version raw Elhub consumption archives in Bronze."""
 
-import argparse
 import hashlib
 import json
 import logging
-import os
 import re
 import tempfile
 import uuid
@@ -15,6 +13,8 @@ from pathlib import Path, PurePosixPath
 from urllib.parse import unquote, urlparse
 
 import requests
+
+from bronze_layer.bronze_common import write_json
 
 DATASET = "CONSUMPTION_PER_GROUP_MBA_HOUR"
 SOURCE_URL = (
@@ -37,18 +37,6 @@ def extract_advertised_period(final_url):
     if start > end:
         raise ValueError(f"Archive has invalid advertised period: {name}")
     return name, start, end
-
-
-def write_json_atomic(path, payload):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temp_path = path.with_name(path.name + f".{uuid.uuid4().hex}.tmp")
-    try:
-        with temp_path.open("w", encoding="utf-8") as handle:
-            json.dump(payload, handle, indent=2, ensure_ascii=False)
-            handle.write("\n")
-        os.replace(temp_path, path)
-    finally:
-        temp_path.unlink(missing_ok=True)
 
 
 def ingest(bronze_root=DEFAULT_BRONZE_ROOT, timeout=180):
@@ -155,7 +143,7 @@ def ingest(bronze_root=DEFAULT_BRONZE_ROOT, timeout=180):
         }
         # Preserve original version metadata on repeat downloads.
         if not metadata_path.exists():
-            write_json_atomic(metadata_path, metadata)
+            write_json(metadata_path, metadata)
 
         run_info.update({
             "status": status,
@@ -167,7 +155,7 @@ def ingest(bronze_root=DEFAULT_BRONZE_ROOT, timeout=180):
             "advertised_period_end": metadata["advertised_period_end"],
             "period_end_matches_expected": matches_expected,
         })
-        write_json_atomic(run_log, run_info)
+        write_json(run_log, run_info)
         print(f"Status: {status}")
         print(f"Archive: {destination}")
         print(f"Metadata: {metadata_path}")
@@ -183,22 +171,9 @@ def ingest(bronze_root=DEFAULT_BRONZE_ROOT, timeout=180):
             "error_type": type(exc).__name__,
             "error": str(exc),
         })
-        write_json_atomic(run_log, run_info)
+        write_json(run_log, run_info)
         logging.error("Ingestion failed: %s", exc)
         raise
     finally:
         if temp_path is not None:
             temp_path.unlink(missing_ok=True)
-
-
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--bronze-root", type=Path, default=DEFAULT_BRONZE_ROOT)
-    parser.add_argument("--timeout", type=int, default=180, help="Read timeout in seconds")
-    args = parser.parse_args()
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
-    ingest(args.bronze_root, args.timeout)
-
-
-if __name__ == "__main__":
-    main()
