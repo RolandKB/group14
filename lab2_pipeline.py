@@ -22,8 +22,8 @@ Usage:
     python run_pipeline.py lab2
 """
 
-import logging
 import json
+import logging
 import os
 import random
 import sys
@@ -47,23 +47,31 @@ try:
     from pyspark.sql import SparkSession
     from pyspark.sql.functions import (
         col,
-        lit,
-        when,
         count,
-        sum as spark_sum,
-        min as spark_min,
-        max as spark_max,
-        round as spark_round,
-        desc,
-        to_timestamp,
-        to_date,
-        hour,
-        dayofweek,
-        lower,
-        upper,
-        trim,
         countDistinct,
+        dayofweek,
+        desc,
         first,
+        hour,
+        lit,
+        lower,
+        to_date,
+        to_timestamp,
+        trim,
+        upper,
+        when,
+    )
+    from pyspark.sql.functions import (
+        max as spark_max,
+    )
+    from pyspark.sql.functions import (
+        min as spark_min,
+    )
+    from pyspark.sql.functions import (
+        round as spark_round,
+    )
+    from pyspark.sql.functions import (
+        sum as spark_sum,
     )
 except ImportError as e:
     logger.error(f"PySpark import failed: {e}")

@@ -11,15 +11,16 @@ if __package__ in (None, ""):
 
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from bronze_layer.ingest_elhub import ingest as ingest_elhub
 from bronze_layer.bronze_common import write_json
-from bronze_layer.ingest_spot_prices import ingest as ingest_prices, PRICE_AREAS
 from bronze_layer.discover_municipalities import discover
-from bronze_layer.generate_neighbors import generate_neighbors
-from bronze_layer.ingest_frost_sources import ingest as ingest_sources
-from bronze_layer.ingest_frost_series import ingest as ingest_series
-from bronze_layer.ingest_frost_observations import ingest as ingest_observations
 from bronze_layer.frost_common import PROJECT_ROOT, frost_session, now, validate_period
+from bronze_layer.generate_neighbors import generate_neighbors
+from bronze_layer.ingest_elhub import ingest as ingest_elhub
+from bronze_layer.ingest_frost_observations import ingest as ingest_observations
+from bronze_layer.ingest_frost_series import ingest as ingest_series
+from bronze_layer.ingest_frost_sources import ingest as ingest_sources
+from bronze_layer.ingest_spot_prices import PRICE_AREAS
+from bronze_layer.ingest_spot_prices import ingest as ingest_prices
 
 LOG = logging.getLogger(__name__)
 DEFAULT_GEODATA = (

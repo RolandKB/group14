@@ -12,9 +12,9 @@ Usage:
     python run_pipeline.py --help        # Show help
 """
 
-import sys
 import argparse
 import logging
+import sys
 import time
 
 # Configure logging

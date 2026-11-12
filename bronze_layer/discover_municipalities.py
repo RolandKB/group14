@@ -1,8 +1,9 @@
 """Read Elhub municipality codes directly from CSV member(s) inside a ZIP."""
 
 import zipfile
-import pandas as pd
 from pathlib import Path
+
+import pandas as pd
 
 from bronze_layer.bronze_common import write_json
 

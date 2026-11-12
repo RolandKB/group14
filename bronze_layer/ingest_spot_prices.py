@@ -6,7 +6,7 @@ import json
 import logging
 import os
 import time
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from uuid import uuid4
 
@@ -102,7 +102,7 @@ def ingest(start, end, root=DEFAULT_ROOT, areas=PRICE_AREAS, refresh=False):
     results = {"downloaded": 0, "cached": 0, "failed": []}
     summary = {
         "run_id": run_id,
-        "started_at_utc": datetime.now(timezone.utc).isoformat(),
+        "started_at_utc": datetime.now(UTC).isoformat(),
         "status": "started",
         "period_start": start,
         "period_end_exclusive": end,
@@ -143,11 +143,11 @@ def ingest(start, end, root=DEFAULT_ROOT, areas=PRICE_AREAS, refresh=False):
                         checksum = hashlib.sha256(body).hexdigest()
                         raw = folder / f"response_{checksum}.json"
                         write_atomic(raw, body)
-                        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+                        stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
                         metadata = {
                             "source": "Hva koster strømmen",
                             "url": response.url,
-                            "retrieved_at_utc": datetime.now(timezone.utc).isoformat(),
+                            "retrieved_at_utc": datetime.now(UTC).isoformat(),
                             "run_id": run_id,
                             "price_area": area,
                             "date": day.isoformat(),
@@ -196,7 +196,7 @@ def ingest(start, end, root=DEFAULT_ROOT, areas=PRICE_AREAS, refresh=False):
         summary.update(status="failed", error=str(exc), error_type=type(exc).__name__)
         raise
     finally:
-        summary["finished_at_utc"] = datetime.now(timezone.utc).isoformat()
+        summary["finished_at_utc"] = datetime.now(UTC).isoformat()
         save_manifest(root / "_runs" / f"{run_id}.json", summary)
 
     return results

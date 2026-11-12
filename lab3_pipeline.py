@@ -62,11 +62,17 @@ try:
         ntile,
         pandas_udf,
         rank,
-        round as spark_round,
         row_number,
-        sum as spark_sum,
         udf,
         when,
+    )
+    from pyspark.sql.functions import (
+        round as spark_round,
+    )
+    from pyspark.sql.functions import (
+        sum as spark_sum,
+    )
+    from pyspark.sql.functions import (
         window as tumbling_window,
     )
     from pyspark.sql.types import DoubleType, StringType

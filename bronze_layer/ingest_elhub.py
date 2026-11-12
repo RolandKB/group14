@@ -2,13 +2,13 @@
 """Download and version raw Elhub consumption archives in Bronze."""
 
 import hashlib
-import os
 import logging
+import os
 import re
 import tempfile
 import uuid
 import zipfile
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path, PurePosixPath
 from urllib.parse import unquote, urlparse
 
@@ -41,7 +41,7 @@ def ingest(bronze_root=DEFAULT_BRONZE_ROOT, timeout=180):
     dataset_dir = Path(bronze_root) / DATASET
     dataset_dir.mkdir(parents=True, exist_ok=True)
     run_id = str(uuid.uuid4())
-    started_at = datetime.now(timezone.utc)
+    started_at = datetime.now(UTC)
     runs_dir = dataset_dir / "_runs"
     run_log = runs_dir / f"{started_at.strftime('%Y%m%dT%H%M%SZ')}_{run_id}.json"
 
@@ -101,7 +101,7 @@ def ingest(bronze_root=DEFAULT_BRONZE_ROOT, timeout=180):
         filename = f"{DATASET}_{checksum[:16]}.zip"
         destination = dataset_dir / filename
         metadata_path = dataset_dir / f"{filename}.metadata.json"
-        downloaded_at = datetime.now(timezone.utc)
+        downloaded_at = datetime.now(UTC)
         expected_end = downloaded_at.date() - timedelta(days=1)
         matches_expected = (
             period_end == expected_end if period_end is not None else None
@@ -164,7 +164,7 @@ def ingest(bronze_root=DEFAULT_BRONZE_ROOT, timeout=180):
         run_info.update(
             {
                 "status": status,
-                "finished_at_utc": datetime.now(timezone.utc).isoformat(),
+                "finished_at_utc": datetime.now(UTC).isoformat(),
                 "file_path": str(destination),
                 "metadata_path": str(metadata_path),
                 "sha256": checksum,
@@ -186,7 +186,7 @@ def ingest(bronze_root=DEFAULT_BRONZE_ROOT, timeout=180):
         run_info.update(
             {
                 "status": "failed",
-                "finished_at_utc": datetime.now(timezone.utc).isoformat(),
+                "finished_at_utc": datetime.now(UTC).isoformat(),
                 "error_type": type(exc).__name__,
                 "error": str(exc),
             }

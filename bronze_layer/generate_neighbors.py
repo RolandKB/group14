@@ -19,9 +19,8 @@ are across the same fjord.
 import hashlib
 import tempfile
 import zipfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from uuid import uuid4
 
 import geopandas as gpd
 from shapely.strtree import STRtree
@@ -64,8 +63,7 @@ def normalize_code(value):
         raise ValueError("A municipality feature has no kommunenummer.")
 
     code = str(value).strip()
-    if code.endswith(".0"):
-        code = code[:-2]
+    code = code.removesuffix(".0")
 
     if not code.isdigit() or len(code) > 4:
         raise ValueError(f"Unexpected municipality code: {value!r}")
@@ -159,7 +157,7 @@ def generate_neighbors(
             if input_path.with_name(input_path.name + ".metadata.json").exists()
             else None
         ),
-        "generated_at_utc": datetime.now(timezone.utc).isoformat(),
+        "generated_at_utc": datetime.now(UTC).isoformat(),
         "filename": output.name,
         "format": "json",
         "size_bytes": output.stat().st_size,

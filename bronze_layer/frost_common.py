@@ -4,7 +4,7 @@ import hashlib
 import json
 import os
 import time
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from pathlib import Path
 from uuid import uuid4
 
@@ -18,7 +18,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 def now():
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def validate_period(start, end):
@@ -119,7 +119,7 @@ def store_response(root: Path, payload, url, extra=None):
         "http_status": payload.http_status,
         **(extra or {}),
     }
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
     write_json(root / f"retrieval_{stamp}_{run_id}.metadata.json", meta)
     return target
 
