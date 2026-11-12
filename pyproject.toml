@@ -7,7 +7,7 @@ authors = [
     { name = "Magnus GJerlaugsen", email = "magje5109@uis.no" },
     { name = "Roland Berge", email = "roland.berge@stud.uis.no" }
 ]
-requires-python = ">=3.14"
+requires-python = ">=3.11"
 dependencies = [
     "findspark>=2.0.1",
     "geopandas>=1.2.0",
