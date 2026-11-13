@@ -40,7 +40,6 @@ def save_json(path, payload):
         temporary.unlink(missing_ok=True)
 
 
-
 def validate_scope(start, end, areas):
     first = date.fromisoformat(start)
     limit = date.fromisoformat(end)
@@ -79,12 +78,17 @@ def select_inputs(bronze_root, start, end, areas):
                 # Confirm that this manifest describes the source day we asked for.
                 if not isinstance(metadata, dict):
                     raise ValueError("Retrieval manifest must be a JSON object")
-                if metadata["source"] != "Hva koster strømmen" or metadata["http_status"] != 200:
+                if (
+                    metadata["source"] != "Hva koster strømmen"
+                    or metadata["http_status"] != 200
+                ):
                     raise ValueError("Unexpected source or HTTP status")
                 if metadata["status"] != "success":
                     raise ValueError("Latest retrieval was not successful")
                 if metadata["price_area"] != area or metadata["date"] != str(day):
-                    raise ValueError("Manifest area/date does not match requested input")
+                    raise ValueError(
+                        "Manifest area/date does not match requested input"
+                    )
                 if metadata["date_timezone"] != "Europe/Oslo":
                     raise ValueError("Unexpected source date timezone")
 
@@ -95,7 +99,9 @@ def select_inputs(bronze_root, start, end, areas):
                 # Verify the original bytes before Spark reads the selected file.
                 raw_file = (folder / metadata["response_file"]).resolve()
                 if raw_file.parent != folder.resolve():
-                    raise ValueError("Response path must stay inside the area/day folder")
+                    raise ValueError(
+                        "Response path must stay inside the area/day folder"
+                    )
                 body = raw_file.read_bytes()
                 if hashlib.sha256(body).hexdigest() != metadata["sha256"]:
                     raise ValueError("Source checksum mismatch")
@@ -116,18 +122,24 @@ def select_inputs(bronze_root, start, end, areas):
 
                 # Local midnight boundaries give the correct elapsed time on DST days.
                 local_start = datetime.combine(day, datetime.min.time(), zone)
-                local_end = datetime.combine(day + timedelta(days=1), datetime.min.time(), zone)
-                selected.append({
-                    "price_area": area,
-                    "requested_date": str(day),
-                    "source_file": str(raw_file),
-                    "source_sha256": metadata["sha256"],
-                    "retrieved_at_utc": retrieved.astimezone(timezone.utc).isoformat(),
-                    "retrieval_manifest": str(manifest.resolve()),
-                    "expected_start_seconds": int(local_start.timestamp()),
-                    "expected_end_seconds": int(local_end.timestamp()),
-                    "source_rows": len(payload),
-                })
+                local_end = datetime.combine(
+                    day + timedelta(days=1), datetime.min.time(), zone
+                )
+                selected.append(
+                    {
+                        "price_area": area,
+                        "requested_date": str(day),
+                        "source_file": str(raw_file),
+                        "source_sha256": metadata["sha256"],
+                        "retrieved_at_utc": retrieved.astimezone(
+                            timezone.utc
+                        ).isoformat(),
+                        "retrieval_manifest": str(manifest.resolve()),
+                        "expected_start_seconds": int(local_start.timestamp()),
+                        "expected_end_seconds": int(local_end.timestamp()),
+                        "source_rows": len(payload),
+                    }
+                )
 
             except (OSError, ValueError, KeyError, TypeError) as exc:
                 # Keep other days usable, but make this input failure visible.
@@ -137,7 +149,6 @@ def select_inputs(bronze_root, start, end, areas):
             day += timedelta(days=1)
 
     return selected, failures
-
 
 
 def read_prices(spark, selected):
@@ -170,7 +181,6 @@ def read_prices(spark, selected):
     return raw.join(F.broadcast(inputs), "source_file", "inner")
 
 
-
 def normalize_prices(raw):
     """Explicit UTC keys and decimal units. Retain raw fields in both outputs."""
 
@@ -183,19 +193,27 @@ def normalize_prices(raw):
         .withColumn("retrieved_at_utc", F.to_timestamp("retrieved_at_utc"))
         .withColumn("start_utc", F.expr("try_to_timestamp(source_start)"))
         .withColumn("end_utc", F.expr("try_to_timestamp(source_end)"))
-        .withColumn("price_nok_per_kwh", F.expr("try_cast(NOK_per_kWh AS DECIMAL(18,8))"))
-        .withColumn("price_eur_per_kwh", F.expr("try_cast(EUR_per_kWh AS DECIMAL(18,8))"))
+        .withColumn(
+            "price_nok_per_kwh", F.expr("try_cast(NOK_per_kWh AS DECIMAL(18,8))")
+        )
+        .withColumn(
+            "price_eur_per_kwh", F.expr("try_cast(EUR_per_kWh AS DECIMAL(18,8))")
+        )
         .withColumn("exchange_rate", F.expr("try_cast(EXR AS DECIMAL(18,8))"))
-        .withColumn("duration_seconds", F.col("end_utc").cast("long") - F.col("start_utc").cast("long"))
-        .withColumn("local_date", F.to_date(F.from_utc_timestamp("start_utc", "Europe/Oslo")))
+        .withColumn(
+            "duration_seconds",
+            F.col("end_utc").cast("long") - F.col("start_utc").cast("long"),
+        )
+        .withColumn(
+            "local_date", F.to_date(F.from_utc_timestamp("start_utc", "Europe/Oslo"))
+        )
     )
 
     # UTC conversion is only trustworthy when the source supplies an offset.
     offset_pattern = r"(Z|[+-][0-9]{2}:[0-9]{2})$"
-    has_offsets = (
-        F.col("source_start").rlike(offset_pattern)
-        & F.col("source_end").rlike(offset_pattern)
-    )
+    has_offsets = F.col("source_start").rlike(offset_pattern) & F.col(
+        "source_end"
+    ).rlike(offset_pattern)
 
     # Negative electricity prices are valid. Exchange rates must be positive.
     valid_prices = (
@@ -211,24 +229,26 @@ def normalize_prices(raw):
         ("EUR_per_kWh", "price_eur_per_kwh"),
         ("EXR", "exchange_rate"),
     ]:
-        precise = precise & (F.expr(f"try_cast({source} AS DECIMAL(38,18))") == F.col(target))
+        precise = precise & (
+            F.expr(f"try_cast({source} AS DECIMAL(38,18))") == F.col(target)
+        )
 
     outside_day = (
-        (F.col("start_utc").cast("long") < F.col("expected_start_seconds"))
-        | (F.col("end_utc").cast("long") > F.col("expected_end_seconds"))
-    )
+        F.col("start_utc").cast("long") < F.col("expected_start_seconds")
+    ) | (F.col("end_utc").cast("long") > F.col("expected_end_seconds"))
 
     # Record the first applicable row-level issue. Day-level checks come next.
     return prices.withColumn(
         "row_issue",
-        F.when(F.col("start_utc").isNull() | F.col("end_utc").isNull(), "invalid_timestamp")
+        F.when(
+            F.col("start_utc").isNull() | F.col("end_utc").isNull(), "invalid_timestamp"
+        )
         .when(~F.coalesce(has_offsets, F.lit(False)), "missing_timestamp_offset")
         .when(~F.coalesce(valid_prices, F.lit(False)), "invalid_price_or_exchange_rate")
         .when(~F.coalesce(precise, F.lit(False)), "decimal_precision_loss")
         .when(F.col("duration_seconds") <= 0, "invalid_interval")
         .when(outside_day, "outside_requested_day"),
     )
-
 
 
 def classify_prices(prices):
@@ -266,12 +286,12 @@ def classify_prices(prices):
     # These issue counts can overlap, so they are not separate row dispositions.
     days = inspected.groupBy(*keys).agg(
         F.count("*").alias("input_rows"),
-        F.sum(
-            F.when(F.col("row_issue").isNotNull(), 1).otherwise(0)
-        ).alias("invalid_rows"),
-        F.sum(
-            F.when(F.col("_key_count") > 1, 1).otherwise(0)
-        ).alias("duplicate_key_rows"),
+        F.sum(F.when(F.col("row_issue").isNotNull(), 1).otherwise(0)).alias(
+            "invalid_rows"
+        ),
+        F.sum(F.when(F.col("_key_count") > 1, 1).otherwise(0)).alias(
+            "duplicate_key_rows"
+        ),
         F.sum("_discontinuity").alias("gaps_or_overlaps"),
         F.min(F.col("start_utc").cast("long")).alias("first_start_seconds"),
         F.max(F.col("end_utc").cast("long")).alias("last_end_seconds"),
@@ -322,7 +342,6 @@ def classify_prices(prices):
     return accepted, quarantine, days
 
 
-
 def run(bronze_root, output_root, start, end, areas, spark):
     """Use the caller's Spark session and paths. Return the recorded run folder.
 
@@ -366,7 +385,9 @@ def run(bronze_root, output_root, start, end, areas, spark):
         # Check that reading and attaching metadata did not lose or multiply rows.
         input_rows = prices.count()
         if input_rows != sum(item["source_rows"] for item in selected):
-            raise ValueError("Spark input rows do not reconcile with selected source arrays")
+            raise ValueError(
+                "Spark input rows do not reconcile with selected source arrays"
+            )
 
         accepted, quarantine, days = classify_prices(prices)
         accepted, quarantine, days = accepted.cache(), quarantine.cache(), days.cache()
@@ -413,7 +434,9 @@ def run(bronze_root, output_root, start, end, areas, spark):
             "removed_duplicate_rows": 0,
             "input_duplicate_key_groups": input_duplicate_groups,
             "accepted_duplicate_key_groups": trusted_duplicates,
-            "negative_accepted_prices": accepted.filter("price_nok_per_kwh < 0").count(),
+            "negative_accepted_prices": accepted.filter(
+                "price_nok_per_kwh < 0"
+            ).count(),
             "selected_days": len(selected),
             "input_failure_days": len(failures),
             "invalid_source_days": invalid_days,
@@ -441,5 +464,3 @@ def run(bronze_root, output_root, start, end, areas, spark):
 
     print(f"""Silver prices: {run_info["status"]}; output={output}""")
     return output
-
-
