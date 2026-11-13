@@ -18,6 +18,13 @@ dependencies = [
     "shapely>=2.2.0",
 ]
 
+[tool.setuptools]
+packages = [
+    "notebooks",
+    "bronze_layer",
+    "silver_layer"
+]
+
 [dependency-groups]
 dev = [
     "ruff>=0.17.4",
