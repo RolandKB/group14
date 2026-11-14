@@ -87,8 +87,11 @@ def select_input(bronze_root):
     if not candidates:
         raise ValueError("No Elhub archive metadata found")
     _, manifest, metadata = max(candidates, key=lambda item: (item[0], item[1]))
-    if (metadata["source"] != "Elhub" or metadata["dataset"] != DATASET
-            or metadata["status"] != "success"):
+    if (
+        metadata["source"] != "Elhub"
+        or metadata["dataset"] != DATASET
+        or metadata["status"] != "success"
+    ):
         raise ValueError("Latest Elhub snapshot has unexpected identity or status")
 
     archive = (folder / metadata["filename"]).resolve()
@@ -120,8 +123,11 @@ def stage_input(selected, staging_root):
         for item in archive.infolist():
             if not item.is_dir() and item.filename.lower().endswith(".csv"):
                 actual_members.append(item.filename)
-        if (not members or sorted(members) != sorted(actual_members)
-                or len(set(members)) != len(members)):
+        if (
+            not members
+            or sorted(members) != sorted(actual_members)
+            or len(set(members)) != len(members)
+        ):
             raise ValueError("CSV member list does not match the archive")
 
         for index, member in enumerate(members):
@@ -158,7 +164,9 @@ def read_consumption(spark, selected, staged):
     return (
         raw.withColumn("source_file", F.lit(selected["archive"]))
         .withColumn("source_sha256", F.lit(selected["source_sha256"]))
-        .withColumn("retrieved_at_utc", F.to_timestamp(F.lit(selected["retrieved_at_utc"])))
+        .withColumn(
+            "retrieved_at_utc", F.to_timestamp(F.lit(selected["retrieved_at_utc"]))
+        )
     )
 
 
@@ -205,16 +213,17 @@ def normalize_consumption(raw):
 
     eic_matches = F.lit(False)
     for area, eic in EIC_BY_AREA.items():
-        eic_matches = eic_matches | ((F.col("price_area") == area) & (F.col("eic") == eic))
+        eic_matches = eic_matches | (
+            (F.col("price_area") == area) & (F.col("eic") == eic)
+        )
 
     # A plain decimal with at most six meaningful fractional digits is exact.
     # Extra trailing zeros are harmless. Scientific notation is not accepted.
     exact_quantity = F.col("source_quantity_kwh").rlike(
         r"^[+-]?[0-9]+(?:\.[0-9]{1,6}0*)?$"
     )
-    valid_count = (
-        F.col("source_metering_point_count").rlike(r"^[+]?[0-9]+$")
-        & (F.col("metering_point_count") > 0)
+    valid_count = F.col("source_metering_point_count").rlike(r"^[+]?[0-9]+$") & (
+        F.col("metering_point_count") > 0
     )
     aligned = F.col("start_utc") == F.date_trunc("hour", F.col("start_utc"))
     exact_hour = F.col("end_utc") == F.col("start_utc") + F.expr("INTERVAL 1 HOUR")
@@ -238,13 +247,10 @@ def normalize_consumption(raw):
 def select_scope(rows, start, end, areas):
     """Retain unassignable rows for quarantine, and count known exclusions separately."""
     first, limit = validate_scope(start, end, areas)
-    in_period = (
-        (F.col("start_utc").cast("long") >= first)
-        & (F.col("start_utc").cast("long") < limit)
+    in_period = (F.col("start_utc").cast("long") >= first) & (
+        F.col("start_utc").cast("long") < limit
     )
-    unknown_area = ~F.coalesce(
-        F.col("price_area").isin(*PRICE_AREAS), F.lit(False)
-    )
+    unknown_area = ~F.coalesce(F.col("price_area").isin(*PRICE_AREAS), F.lit(False))
     return rows.filter(
         (in_period | F.col("start_utc").isNull())
         & (F.col("price_area").isin(*areas) | unknown_area)
@@ -253,7 +259,9 @@ def select_scope(rows, start, end, areas):
 
 def classify_consumption(rows):
     """Separate trusted rows, rejected rows, and superseded or duplicate evidence."""
-    invalid = rows.filter("row_issue IS NOT NULL").withColumn("disposition_reason", F.col("row_issue"))
+    invalid = rows.filter("row_issue IS NOT NULL").withColumn(
+        "disposition_reason", F.col("row_issue")
+    )
     valid = rows.filter("row_issue IS NULL")
 
     # Only valid measurements can become the current revision.
@@ -265,10 +273,14 @@ def classify_consumption(rows):
 
     # Different latest values for the same key are ambiguous, even if both are valid.
     values = F.struct("end_utc", "eic", "quantity_kwh", "metering_point_count")
-    conflicts = latest.groupBy(*BUSINESS_KEY).agg(F.countDistinct(values).alias("_variants"))
+    conflicts = latest.groupBy(*BUSINESS_KEY).agg(
+        F.countDistinct(values).alias("_variants")
+    )
     latest = latest.join(conflicts, BUSINESS_KEY)
     conflicting = latest.filter("_variants > 1").drop("_variants")
-    conflicting = conflicting.withColumn("disposition_reason", F.lit("conflicting_latest_revision"))
+    conflicting = conflicting.withColumn(
+        "disposition_reason", F.lit("conflicting_latest_revision")
+    )
 
     # Keep one equivalent measurement and account for all remaining copies.
     equivalent = latest.filter("_variants = 1").drop("_variants")
@@ -280,7 +292,9 @@ def classify_consumption(rows):
     accepted = equivalent.filter("_copy = 1").drop("_copy")
     accepted = accepted.withColumn("disposition_reason", F.lit(None).cast("string"))
     duplicates = equivalent.filter("_copy > 1").drop("_copy")
-    duplicates = duplicates.withColumn("disposition_reason", F.lit("duplicate_measurement"))
+    duplicates = duplicates.withColumn(
+        "disposition_reason", F.lit("duplicate_measurement")
+    )
 
     return accepted, invalid.unionByName(conflicting), earlier.unionByName(duplicates)
 
@@ -292,8 +306,12 @@ def check_coverage(spark, accepted, start, end, areas):
     for area in sorted(set(areas)):
         for group in CONSUMPTION_GROUPS:
             combinations.append((area, group))
-    groups = spark.createDataFrame(combinations, "price_area STRING, consumption_group STRING")
-    hours = spark.range(first, limit, 3600).select(F.col("id").cast("timestamp").alias("start_utc"))
+    groups = spark.createDataFrame(
+        combinations, "price_area STRING, consumption_group STRING"
+    )
+    hours = spark.range(first, limit, 3600).select(
+        F.col("id").cast("timestamp").alias("start_utc")
+    )
     expected = groups.crossJoin(hours)
     missing = expected.join(accepted.select(*BUSINESS_KEY), BUSINESS_KEY, "left_anti")
     return missing
@@ -312,11 +330,15 @@ def run(bronze_root, output_root, start, end, areas, spark):
     staging = output / "_staged"
     cached = []
     run_info = {
-        "status": "started", "rule_version": RULE_VERSION,
+        "status": "started",
+        "rule_version": RULE_VERSION,
         "started_at_utc": datetime.now(timezone.utc).isoformat(),
-        "start_date": start, "end_date_exclusive": end,
-        "date_timezone": "Europe/Oslo", "areas": sorted(set(areas)),
-        "bronze_root": str(bronze_root), "output": str(output),
+        "start_date": start,
+        "end_date_exclusive": end,
+        "date_timezone": "Europe/Oslo",
+        "areas": sorted(set(areas)),
+        "bronze_root": str(bronze_root),
+        "output": str(output),
     }
     save_json(output / "run.json", run_info)
 
@@ -335,7 +357,11 @@ def run(bronze_root, output_root, start, end, areas, spark):
         cached.append(scoped)
         input_rows = scoped.count()
         accepted, quarantine, discarded = classify_consumption(scoped)
-        outputs = {"accepted": accepted, "quarantine": quarantine, "discarded": discarded}
+        outputs = {
+            "accepted": accepted,
+            "quarantine": quarantine,
+            "discarded": discarded,
+        }
         counts = {}
         for name, frame in outputs.items():
             frame.cache()
@@ -349,9 +375,13 @@ def run(bronze_root, output_root, start, end, areas, spark):
         missing = check_coverage(spark, accepted, start, end, areas).cache()
         cached.append(missing)
         missing_rows = missing.count()
-        expected_rows = ((limit - first) // 3600) * len(set(areas)) * len(CONSUMPTION_GROUPS)
+        expected_rows = (
+            ((limit - first) // 3600) * len(set(areas)) * len(CONSUMPTION_GROUPS)
+        )
         if counts["accepted"] + missing_rows != expected_rows:
-            raise ValueError("Accepted rows do not reconcile with expected hourly coverage")
+            raise ValueError(
+                "Accepted rows do not reconcile with expected hourly coverage"
+            )
 
         reasons = {}
         for frame in (quarantine, discarded):
@@ -359,11 +389,15 @@ def run(bronze_root, output_root, start, end, areas, spark):
                 reasons[row["disposition_reason"]] = row["count"]
         total = accepted.agg(F.sum("quantity_kwh").alias("total")).first()["total"]
         quality = {
-            "source_rows": source_rows, "input_rows": input_rows,
+            "source_rows": source_rows,
+            "input_rows": input_rows,
             "out_of_scope_rows": source_rows - input_rows,
-            "accepted_rows": counts["accepted"], "quarantined_rows": counts["quarantine"],
-            "discarded_rows": counts["discarded"], "expected_rows": expected_rows,
-            "missing_intervals": missing_rows, "accepted_duplicate_keys": 0,
+            "accepted_rows": counts["accepted"],
+            "quarantined_rows": counts["quarantine"],
+            "discarded_rows": counts["discarded"],
+            "expected_rows": expected_rows,
+            "missing_intervals": missing_rows,
+            "accepted_duplicate_keys": 0,
             "accepted_total_kwh": str(total) if total is not None else None,
             "disposition_counts": reasons,
         }
@@ -373,7 +407,9 @@ def run(bronze_root, output_root, start, end, areas, spark):
             frame.write.parquet(str(output / name))
         missing.write.parquet(str(output / "missing_intervals"))
         save_json(output / "quality.json", quality)
-        run_info["status"] = "partial" if missing_rows or counts["quarantine"] else "success"
+        run_info["status"] = (
+            "partial" if missing_rows or counts["quarantine"] else "success"
+        )
 
     except BaseException as exc:
         run_info.update(status="failed", error=str(exc), error_type=type(exc).__name__)
