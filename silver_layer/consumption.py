@@ -3,16 +3,16 @@
 import csv
 import hashlib
 import json
-import os
 import shutil
 import zipfile
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from pathlib import Path
-from uuid import uuid4
 from zoneinfo import ZoneInfo
 
-from pyspark.sql import Window, functions as F
+from pyspark.sql import Window
+from pyspark.sql import functions as F
 
+from common.runs import ensure_run_id
 from common.storage import write_json
 
 DATASET = "CONSUMPTION_PER_GROUP_MBA_HOUR"
@@ -308,7 +308,7 @@ def check_coverage(spark, accepted, start, end, areas):
     return missing
 
 
-def run(bronze_root, output_root, start, end, areas, spark):
+def run(bronze_root, output_root, start, end, areas, spark, run_id=None):
     """Run a full requested scope using the caller's paths and Spark session."""
     first, limit = validate_scope(start, end, areas)
     bronze_root = Path(bronze_root).resolve()
@@ -316,14 +316,16 @@ def run(bronze_root, output_root, start, end, areas, spark):
     if output_root == bronze_root or bronze_root in output_root.parents:
         raise ValueError("Silver output must not be inside Bronze")
 
-    output = output_root / uuid4().hex
+    run_id = ensure_run_id(run_id)
+    output = output_root / run_id
     output.mkdir(parents=True)
     staging = output / "_staged"
     cached = []
     run_info = {
+        "run_id": run_id,
         "status": "started",
         "rule_version": RULE_VERSION,
-        "started_at_utc": datetime.now(timezone.utc).isoformat(),
+        "started_at_utc": datetime.now(UTC).isoformat(),
         "start_date": start,
         "end_date_exclusive": end,
         "date_timezone": "Europe/Oslo",
@@ -407,7 +409,7 @@ def run(bronze_root, output_root, start, end, areas, spark):
         raise
 
     finally:
-        run_info["finished_at_utc"] = datetime.now(timezone.utc).isoformat()
+        run_info["finished_at_utc"] = datetime.now(UTC).isoformat()
         write_json(output / "run.json", run_info)
         for frame in cached:
             frame.unpersist()

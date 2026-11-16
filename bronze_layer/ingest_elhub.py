@@ -5,7 +5,6 @@ import logging
 import os
 import re
 import tempfile
-import uuid
 import zipfile
 from datetime import UTC, datetime, timedelta
 from pathlib import Path, PurePosixPath
@@ -13,6 +12,7 @@ from urllib.parse import unquote, urlparse
 
 import requests
 
+from common.runs import ensure_run_id
 from common.storage import write_json
 
 LOG = logging.getLogger(__name__)
@@ -38,10 +38,10 @@ def extract_advertised_period(final_url):
     return name, start, end
 
 
-def ingest(bronze_root=DEFAULT_BRONZE_ROOT, timeout=180):
+def ingest(bronze_root=DEFAULT_BRONZE_ROOT, timeout=180, run_id=None):
     dataset_dir = Path(bronze_root) / DATASET
     dataset_dir.mkdir(parents=True, exist_ok=True)
-    run_id = str(uuid.uuid4())
+    run_id = ensure_run_id(run_id)
     started_at = datetime.now(UTC)
     runs_dir = dataset_dir / "_runs"
     run_log = runs_dir / f"{started_at.strftime('%Y%m%dT%H%M%SZ')}_{run_id}.json"

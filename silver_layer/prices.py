@@ -2,14 +2,14 @@
 
 import hashlib
 import json
-import os
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
-from uuid import uuid4
 from zoneinfo import ZoneInfo
 
-from pyspark.sql import Window, functions as F
+from pyspark.sql import Window
+from pyspark.sql import functions as F
 
+from common.runs import ensure_run_id
 from common.storage import write_json
 
 PRICE_AREAS = ("NO1", "NO2", "NO3", "NO4", "NO5")
@@ -68,7 +68,7 @@ def select_inputs(bronze_root, start, end, areas):
 
                 # Confirm that this manifest describes the source day we asked for.
                 if not isinstance(metadata, dict):
-                    raise ValueError("Retrieval manifest must be a JSON object")
+                    raise TypeError("Retrieval manifest must be a JSON object")
                 if (
                     metadata["source"] != "Hva koster strømmen"
                     or metadata["http_status"] != 200
@@ -104,10 +104,10 @@ def select_inputs(bronze_root, start, end, areas):
                     raise ValueError("Expected a nonempty JSON array")
                 for record in payload:
                     if not isinstance(record, dict):
-                        raise ValueError("Every interval must be a JSON object")
+                        raise TypeError("Every interval must be a JSON object")
                     for field in RAW_FIELDS:
                         if isinstance(record.get(field), (dict, list)):
-                            raise ValueError(f"Nested value in scalar field {field}")
+                            raise TypeError(f"Nested value in scalar field {field}")
                 if metadata["record_count"] != len(payload):
                     raise ValueError("Manifest record count differs from raw array")
 
@@ -122,9 +122,7 @@ def select_inputs(bronze_root, start, end, areas):
                         "requested_date": str(day),
                         "source_file": str(raw_file),
                         "source_sha256": metadata["sha256"],
-                        "retrieved_at_utc": retrieved.astimezone(
-                            timezone.utc
-                        ).isoformat(),
+                        "retrieved_at_utc": retrieved.astimezone(UTC).isoformat(),
                         "retrieval_manifest": str(manifest.resolve()),
                         "expected_start_seconds": int(local_start.timestamp()),
                         "expected_end_seconds": int(local_end.timestamp()),
@@ -333,7 +331,7 @@ def classify_prices(prices):
     return accepted, quarantine, days
 
 
-def run(bronze_root, output_root, start, end, areas, spark):
+def run(bronze_root, output_root, start, end, areas, spark, run_id=None):
     """Use the caller's Spark session and paths. Return the recorded run folder.
 
     The caller owns the session lifecycle and decides how to handle a partial run.
@@ -345,11 +343,13 @@ def run(bronze_root, output_root, start, end, areas, spark):
     if output_root == bronze_root or bronze_root in output_root.parents:
         raise ValueError("Silver output must not be inside Bronze")
 
-    output = output_root / uuid4().hex
+    run_id = ensure_run_id(run_id)
+    output = output_root / run_id
     output.mkdir(parents=True)
     run_info = {
+        "run_id": run_id,
         "status": "started",
-        "started_at_utc": datetime.now(timezone.utc).isoformat(),
+        "started_at_utc": datetime.now(UTC).isoformat(),
         "rule_version": RULE_VERSION,
         "start_date": start,
         "end_date_exclusive": end,
@@ -448,7 +448,7 @@ def run(bronze_root, output_root, start, end, areas, spark):
 
     finally:
         # Release our cached DataFrames, but leave the caller's Spark session open.
-        run_info["finished_at_utc"] = datetime.now(timezone.utc).isoformat()
+        run_info["finished_at_utc"] = datetime.now(UTC).isoformat()
         write_json(output / "run.json", run_info)
         for frame in cached_frames:
             frame.unpersist()

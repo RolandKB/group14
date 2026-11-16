@@ -38,7 +38,12 @@ def months(start: str, end: str):
 
 
 def ingest(
-    station_ids, start, end, root=Path("data/bronze/frost/observations"), refresh=False
+    station_ids,
+    start,
+    end,
+    root=Path("data/bronze/frost/observations"),
+    refresh=False,
+    run_id=None,
 ):
     validate_period(start, end)
     results = {"downloaded": 0, "cached": 0, "empty": 0, "failed": []}
@@ -165,5 +170,5 @@ def ingest(
         results["empty"],
         len(results["failed"]),
     )
-    write_run(root, results)
+    write_run(root, results, run_id=run_id)
     return results

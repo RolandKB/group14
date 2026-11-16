@@ -25,6 +25,7 @@ from pathlib import Path
 import geopandas as gpd
 from shapely.strtree import STRtree
 
+from common.runs import ensure_run_id
 from common.storage import write_json
 
 LOG = logging.getLogger(__name__)
@@ -79,8 +80,10 @@ def generate_neighbors(
     code_column: str = "kommunenummer",
     type_column: str = "objtype",
     municipality_type: str = "Kommune",
+    run_id: str | None = None,
 ) -> Path:
     """Create and write a JSON map of Norwegian municipality neighbors."""
+    run_id = ensure_run_id(run_id)
     LOG.info("Generating municipality neighbors from %s", input_path)
     if not input_path.exists():
         raise FileNotFoundError(f"Input file not found: {input_path}")
@@ -150,6 +153,7 @@ def generate_neighbors(
     write_json(output, result)
 
     metadata = {
+        "run_id": run_id,
         "source": "Geonorge",
         "dataset": "Administrative enheter kommuner - municipality neighbors",
         "source_file": str(input_path),

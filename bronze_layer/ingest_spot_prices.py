@@ -11,6 +11,8 @@ from uuid import uuid4
 
 import requests
 
+from common.runs import ensure_run_id
+
 if __package__ in (None, ""):
     import sys
 
@@ -80,7 +82,9 @@ def download(session, url):
             time.sleep(delay)
 
 
-def ingest(start, end, root=DEFAULT_ROOT, areas=PRICE_AREAS, refresh=False):
+def ingest(
+    start, end, root=DEFAULT_ROOT, areas=PRICE_AREAS, refresh=False, run_id=None
+):
     """Fetch local calendar dates from start through end (exclusive)."""
     first = date.fromisoformat(start)
     limit = date.fromisoformat(end)
@@ -97,7 +101,7 @@ def ingest(start, end, root=DEFAULT_ROOT, areas=PRICE_AREAS, refresh=False):
             raise ValueError(f"Unknown price area: {area}")
 
     root = Path(root)
-    run_id = uuid4().hex
+    run_id = ensure_run_id(run_id)
     results = {"downloaded": 0, "cached": 0, "failed": []}
     summary = {
         "run_id": run_id,

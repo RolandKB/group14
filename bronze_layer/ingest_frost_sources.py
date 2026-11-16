@@ -19,7 +19,9 @@ from bronze_layer.frost_common import (
 LOG = logging.getLogger(__name__)
 
 
-def ingest(codes=None, root=Path("data/bronze/frost/sources"), refresh=False):
+def ingest(
+    codes=None, root=Path("data/bronze/frost/sources"), refresh=False, run_id=None
+):
     result = {}
     with frost_session() as session:
         for code in [None] if codes is None else sorted(set(codes)):
@@ -64,5 +66,5 @@ def ingest(codes=None, root=Path("data/bronze/frost/sources"), refresh=False):
             )
             result[code or "NO"] = {"status": status, "station_ids": ids}
             LOG.info("%s: %s (%d stations)", code, status, len(ids))
-    write_run(root, result)
+    write_run(root, result, run_id=run_id)
     return result

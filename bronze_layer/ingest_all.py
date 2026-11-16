@@ -4,14 +4,12 @@ import argparse
 import json
 import logging
 from pathlib import Path
-from uuid import uuid4
 
 if __package__ in (None, ""):
     import sys
 
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from common.storage import write_json
 from bronze_layer.discover_municipalities import discover
 from bronze_layer.frost_common import PROJECT_ROOT, frost_session, now, validate_period
 from bronze_layer.generate_neighbors import generate_neighbors
@@ -21,6 +19,8 @@ from bronze_layer.ingest_frost_series import ingest as ingest_series
 from bronze_layer.ingest_frost_sources import ingest as ingest_sources
 from bronze_layer.ingest_spot_prices import PRICE_AREAS
 from bronze_layer.ingest_spot_prices import ingest as ingest_prices
+from common.runs import new_run_id
+from common.storage import write_json
 
 LOG = logging.getLogger(__name__)
 DEFAULT_GEODATA = (
@@ -107,7 +107,7 @@ def main(argv=None):
             value = str(value)
         configuration[name] = value
 
-    run_id = uuid4().hex
+    run_id = new_run_id()
     summary = {
         "run_id": run_id,
         "started_at_utc": now(),
@@ -129,17 +129,19 @@ def main(argv=None):
     try:
         if not args.skip_elhub:
             LOG.info("Starting Elhub ingestion")
-            archive = ingest_elhub(args.bronze_root / "elhub")
+            archive = ingest_elhub(args.bronze_root / "elhub", run_id=run_id)
             summary["elhub_archive"] = str(archive)
 
         if not args.skip_neighbors:
             LOG.info("Generating municipality neighbors from %s", args.geodata)
-            generate_neighbors(args.geodata, bronze_root=args.bronze_root)
+            generate_neighbors(
+                args.geodata, bronze_root=args.bronze_root, run_id=run_id
+            )
 
         # Without a municipality archive, discover stations throughout Norway.
         codes = None
         if args.municipality_archive:
-            codes = discover(args.municipality_archive)
+            codes = discover(args.municipality_archive, run_id=run_id)
             if not codes:
                 raise ValueError("Municipality archive contains no municipality codes")
             write_json(args.bronze_root / "elhub/municipalities.json", codes)
@@ -151,6 +153,7 @@ def main(argv=None):
             codes,
             root=args.bronze_root / "frost/sources",
             refresh=args.refresh_sources,
+            run_id=run_id,
         )
 
         # A station may appear in several results. Download it only once.
@@ -167,6 +170,7 @@ def main(argv=None):
             args.end_date,
             root=args.bronze_root / "frost/series",
             refresh=args.refresh_series,
+            run_id=run_id,
         )
 
         # Only request observations from stations with relevant temperature series.
@@ -192,6 +196,7 @@ def main(argv=None):
                 args.end_date,
                 root=args.bronze_root / "frost/observations",
                 refresh=args.refresh_observations,
+                run_id=run_id,
             )
 
         # Prices use the same date range, with one request per area and day.
@@ -204,6 +209,7 @@ def main(argv=None):
                 root=args.bronze_root / "spot_prices",
                 areas=args.price_areas,
                 refresh=args.refresh_prices,
+                run_id=run_id,
             )
 
         # Collect failed requests so a later run can be inspected and resumed.
