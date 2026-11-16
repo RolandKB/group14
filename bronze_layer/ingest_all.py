@@ -11,7 +11,7 @@ if __package__ in (None, ""):
 
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from bronze_layer.bronze_common import write_json
+from common.storage import write_json
 from bronze_layer.discover_municipalities import discover
 from bronze_layer.frost_common import PROJECT_ROOT, frost_session, now, validate_period
 from bronze_layer.generate_neighbors import generate_neighbors

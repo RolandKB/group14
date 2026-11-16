@@ -13,6 +13,8 @@ from zoneinfo import ZoneInfo
 
 from pyspark.sql import Window, functions as F
 
+from common.storage import write_json
+
 DATASET = "CONSUMPTION_PER_GROUP_MBA_HOUR"
 PRICE_AREAS = ("NO1", "NO2", "NO3", "NO4", "NO5")
 CONSUMPTION_GROUPS = ("cabin", "household", "primary", "secondary", "tertiary")
@@ -45,17 +47,6 @@ EIC_BY_AREA = {
 }
 BUSINESS_KEY = ["price_area", "consumption_group", "start_utc"]
 RULE_VERSION = "consumption-v1"
-
-
-def save_json(path, payload):
-    """Publish a complete JSON document with an atomic local replacement."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(f".{uuid4().hex}.tmp")
-    try:
-        temporary.write_text(json.dumps(payload, indent=2) + "\n")
-        os.replace(temporary, path)
-    finally:
-        temporary.unlink(missing_ok=True)
 
 
 def validate_scope(start, end, areas):
@@ -340,13 +331,13 @@ def run(bronze_root, output_root, start, end, areas, spark):
         "bronze_root": str(bronze_root),
         "output": str(output),
     }
-    save_json(output / "run.json", run_info)
+    write_json(output / "run.json", run_info)
 
     try:
         spark.conf.set("spark.sql.session.timeZone", "UTC")
         run_info["spark_version"] = spark.version
         selected = select_input(bronze_root)
-        save_json(output / "inputs.json", selected)
+        write_json(output / "inputs.json", selected)
         staged = stage_input(selected, staging)
         raw = read_consumption(spark, selected, staged)
         normalized = normalize_consumption(raw).cache()
@@ -406,7 +397,7 @@ def run(bronze_root, output_root, start, end, areas, spark):
         for name, frame in outputs.items():
             frame.write.parquet(str(output / name))
         missing.write.parquet(str(output / "missing_intervals"))
-        save_json(output / "quality.json", quality)
+        write_json(output / "quality.json", quality)
         run_info["status"] = (
             "partial" if missing_rows or counts["quarantine"] else "success"
         )
@@ -417,7 +408,7 @@ def run(bronze_root, output_root, start, end, areas, spark):
 
     finally:
         run_info["finished_at_utc"] = datetime.now(timezone.utc).isoformat()
-        save_json(output / "run.json", run_info)
+        write_json(output / "run.json", run_info)
         for frame in cached:
             frame.unpersist()
         # Spark has finished reading the temporary extraction. Bronze remains reusable.

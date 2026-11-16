@@ -17,6 +17,8 @@ from uuid import uuid4
 
 from pyspark.sql import Window, functions as F
 
+from common.storage import write_json
+
 RULE_VERSION = "temperature-v1"
 RESOLUTIONS = {
     "PT1M": 60,
@@ -52,16 +54,6 @@ SERIES_SCHEMA = """
     time_series_id LONG, level_type STRING, level_unit STRING, level_value DECIMAL(12,4),
     first_second LONG, last_second LONG, step_seconds LONG
 """
-
-
-def save_json(path, payload):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(f".{uuid4().hex}.tmp")
-    try:
-        temporary.write_text(json.dumps(payload, indent=2) + "\n")
-        os.replace(temporary, path)
-    finally:
-        temporary.unlink(missing_ok=True)
 
 
 def epoch(value):
@@ -523,7 +515,7 @@ def process_month(spark, bronze_root, batch, start, end, stations):
         paths, selected, failures = stage_month(
             bronze_root, staging, start, end, stations
         )
-        save_json(batch / "inputs.json", {"selected": selected, "failures": failures})
+        write_json(batch / "inputs.json", {"selected": selected, "failures": failures})
         normalized = normalize_temperature(read_temperature(spark, paths)).cache()
         cached.append(normalized)
         input_rows = normalized.count()
@@ -551,7 +543,7 @@ def process_month(spark, bronze_root, batch, start, end, stations):
         intervals, series_selected, series_failures = load_series(
             bronze_root, stations, start, end
         )
-        save_json(
+        write_json(
             batch / "series_inputs.json",
             {"selected": series_selected, "failures": series_failures},
         )
@@ -591,7 +583,7 @@ def process_month(spark, bronze_root, batch, start, end, stations):
         for name, frame in outputs.items():
             frame.write.parquet(str(batch / name))
         coverage.write.parquet(str(batch / "coverage"))
-        save_json(batch / "quality.json", quality)
+        write_json(batch / "quality.json", quality)
         return quality
     finally:
         for frame in cached:
@@ -621,7 +613,7 @@ def run(bronze_root, output_root, start, end, stations, spark):
         "scope_note": "Dates use UTC months, not Norwegian calendar-year boundaries.",
         "completed_months": [],
     }
-    save_json(output / "run.json", info)
+    write_json(output / "run.json", info)
     reports = []
     try:
         spark.conf.set("spark.sql.session.timeZone", "UTC")
@@ -631,12 +623,12 @@ def run(bronze_root, output_root, start, end, stations, spark):
             quality = process_month(spark, bronze_root, batch, first, limit, stations)
             reports.append({"month": first[:7], **quality})
             info["completed_months"].append(first[:7])
-            save_json(output / "run.json", info)
+            write_json(output / "run.json", info)
         totals = {}
         for key in reports[0]:
             if isinstance(reports[0][key], int):
                 totals[key] = sum(report[key] for report in reports)
-        save_json(output / "quality.json", {"totals": totals, "months": reports})
+        write_json(output / "quality.json", {"totals": totals, "months": reports})
         info["status"] = (
             "partial"
             if any(
@@ -663,6 +655,6 @@ def run(bronze_root, output_root, start, end, stations, spark):
         raise
     finally:
         info["finished_at_utc"] = datetime.now(timezone.utc).isoformat()
-        save_json(output / "run.json", info)
+        write_json(output / "run.json", info)
     print(f"Silver temperature output: {output}")
     return output
