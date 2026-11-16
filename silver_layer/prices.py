@@ -5,11 +5,12 @@ import json
 import os
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from uuid import uuid4
 from zoneinfo import ZoneInfo
 
-from pyspark.sql import Window, functions as F
+from pyspark.sql import Window
+from pyspark.sql import functions as F
 
+from common.runs import ensure_run_id
 from common.storage import write_json
 
 PRICE_AREAS = ("NO1", "NO2", "NO3", "NO4", "NO5")
@@ -333,7 +334,7 @@ def classify_prices(prices):
     return accepted, quarantine, days
 
 
-def run(bronze_root, output_root, start, end, areas, spark):
+def run(bronze_root, output_root, start, end, areas, spark, run_id=None):
     """Use the caller's Spark session and paths. Return the recorded run folder.
 
     The caller owns the session lifecycle and decides how to handle a partial run.
@@ -345,9 +346,11 @@ def run(bronze_root, output_root, start, end, areas, spark):
     if output_root == bronze_root or bronze_root in output_root.parents:
         raise ValueError("Silver output must not be inside Bronze")
 
-    output = output_root / uuid4().hex
+    run_id = ensure_run_id(run_id)
+    output = output_root / run_id
     output.mkdir(parents=True)
     run_info = {
+        "run_id": run_id,
         "status": "started",
         "started_at_utc": datetime.now(timezone.utc).isoformat(),
         "rule_version": RULE_VERSION,

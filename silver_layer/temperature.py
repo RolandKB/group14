@@ -13,10 +13,11 @@ import shutil
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from pathlib import Path
-from uuid import uuid4
 
-from pyspark.sql import Window, functions as F
+from pyspark.sql import Window
+from pyspark.sql import functions as F
 
+from common.runs import ensure_run_id
 from common.storage import write_json
 
 RULE_VERSION = "temperature-v1"
@@ -592,16 +593,18 @@ def process_month(spark, bronze_root, batch, start, end, stations):
             shutil.rmtree(staging)
 
 
-def run(bronze_root, output_root, start, end, stations, spark):
+def run(bronze_root, output_root, start, end, stations, spark, run_id=None):
     """Process full UTC months with a caller-owned Spark session and explicit station list."""
     periods = monthly_periods(start, end)
     stations = validate_stations(stations)
     bronze_root, output_root = Path(bronze_root).resolve(), Path(output_root).resolve()
     if output_root == bronze_root or bronze_root in output_root.parents:
         raise ValueError("Silver output must not be inside Bronze")
-    output = output_root / uuid4().hex
+    run_id = ensure_run_id(run_id)
+    output = output_root / run_id
     output.mkdir(parents=True)
     info = {
+        "run_id": run_id,
         "status": "started",
         "rule_version": RULE_VERSION,
         "started_at_utc": datetime.now(timezone.utc).isoformat(),
