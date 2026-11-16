@@ -22,7 +22,9 @@ dependencies = [
 packages = [
     "notebooks",
     "bronze_layer",
-    "silver_layer"
+    "silver_layer",
+    "gold_layer",
+    "common"
 ]
 
 [dependency-groups]
