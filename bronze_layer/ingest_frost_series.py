@@ -40,7 +40,12 @@ def series_candidates(payload, start, end):
 
 
 def ingest(
-    station_ids, start, end, root=Path("data/bronze/frost/series"), refresh=False
+    station_ids,
+    start,
+    end,
+    root=Path("data/bronze/frost/series"),
+    refresh=False,
+    run_id=None,
 ):
     validate_period(start, end)
     results = {}
@@ -89,5 +94,5 @@ def ingest(
                 "cached" if cached and not refresh else "downloaded",
                 len(candidates),
             )
-    write_run(root, results)
+    write_run(root, results, run_id=run_id)
     return results

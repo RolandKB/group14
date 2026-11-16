@@ -11,6 +11,7 @@ from uuid import uuid4
 import requests
 from dotenv import load_dotenv
 
+from common.runs import ensure_run_id
 from common.storage import write_json
 
 BASE = "https://frost.met.no"
@@ -139,8 +140,8 @@ def cached_response(root):
     return None
 
 
-def write_run(root, results):
-    run_id = uuid4().hex
+def write_run(root, results, run_id=None):
+    run_id = ensure_run_id(run_id)
     write_json(
         Path(root) / "_runs" / f"{run_id}.json",
         {
