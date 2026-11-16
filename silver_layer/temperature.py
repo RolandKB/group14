@@ -7,10 +7,9 @@ https://frost.met.no/dataclarifications.html
 
 import hashlib
 import json
-import os
 import re
 import shutil
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
 
@@ -59,7 +58,7 @@ SERIES_SCHEMA = """
 
 def epoch(value):
     """Require an explicit offset before interpreting a source timestamp."""
-    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    parsed = datetime.fromisoformat(value)
     if parsed.utcoffset() is None:
         raise ValueError("Timestamp must contain an offset")
     return int(parsed.timestamp())
@@ -90,9 +89,7 @@ def load_response(folder, station, period=None):
     for manifest in sorted(folder.glob("retrieval_*.metadata.json")):
         metadata = json.loads(manifest.read_text())
         epoch(metadata["retrieved_at_utc"])
-        retrieved = datetime.fromisoformat(
-            metadata["retrieved_at_utc"].replace("Z", "+00:00")
-        )
+        retrieved = datetime.fromisoformat(metadata["retrieved_at_utc"])
         candidates.append((retrieved, str(manifest), metadata))
     if not candidates:
         raise ValueError("Missing retrieval manifest")
@@ -185,7 +182,7 @@ def stage_month(bronze_root, staging, start, end, stations):
                         )
                     for observation in record["observations"]:
                         if not isinstance(observation, dict):
-                            raise ValueError("Observation must be an object")
+                            raise TypeError("Observation must be an object")
                         level = observation.get("level")
                         if level is not None and not isinstance(level, dict):
                             raise ValueError("Sensor level must be an object")
@@ -607,7 +604,7 @@ def run(bronze_root, output_root, start, end, stations, spark, run_id=None):
         "run_id": run_id,
         "status": "started",
         "rule_version": RULE_VERSION,
-        "started_at_utc": datetime.now(timezone.utc).isoformat(),
+        "started_at_utc": datetime.now(UTC).isoformat(),
         "start_date": start,
         "end_date_exclusive": end,
         "date_timezone": "UTC",
@@ -657,7 +654,7 @@ def run(bronze_root, output_root, start, end, stations, spark, run_id=None):
         info.update(status="failed", error=str(exc), error_type=type(exc).__name__)
         raise
     finally:
-        info["finished_at_utc"] = datetime.now(timezone.utc).isoformat()
+        info["finished_at_utc"] = datetime.now(UTC).isoformat()
         write_json(output / "run.json", info)
     print(f"Silver temperature output: {output}")
     return output

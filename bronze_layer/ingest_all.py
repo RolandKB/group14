@@ -134,7 +134,9 @@ def main(argv=None):
 
         if not args.skip_neighbors:
             LOG.info("Generating municipality neighbors from %s", args.geodata)
-            generate_neighbors(args.geodata, bronze_root=args.bronze_root, run_id=run_id)
+            generate_neighbors(
+                args.geodata, bronze_root=args.bronze_root, run_id=run_id
+            )
 
         # Without a municipality archive, discover stations throughout Norway.
         codes = None

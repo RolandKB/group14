@@ -3,10 +3,9 @@
 import csv
 import hashlib
 import json
-import os
 import shutil
 import zipfile
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -326,7 +325,7 @@ def run(bronze_root, output_root, start, end, areas, spark, run_id=None):
         "run_id": run_id,
         "status": "started",
         "rule_version": RULE_VERSION,
-        "started_at_utc": datetime.now(timezone.utc).isoformat(),
+        "started_at_utc": datetime.now(UTC).isoformat(),
         "start_date": start,
         "end_date_exclusive": end,
         "date_timezone": "Europe/Oslo",
@@ -410,7 +409,7 @@ def run(bronze_root, output_root, start, end, areas, spark, run_id=None):
         raise
 
     finally:
-        run_info["finished_at_utc"] = datetime.now(timezone.utc).isoformat()
+        run_info["finished_at_utc"] = datetime.now(UTC).isoformat()
         write_json(output / "run.json", run_info)
         for frame in cached:
             frame.unpersist()

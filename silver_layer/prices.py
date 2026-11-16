@@ -2,8 +2,7 @@
 
 import hashlib
 import json
-import os
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -69,7 +68,7 @@ def select_inputs(bronze_root, start, end, areas):
 
                 # Confirm that this manifest describes the source day we asked for.
                 if not isinstance(metadata, dict):
-                    raise ValueError("Retrieval manifest must be a JSON object")
+                    raise TypeError("Retrieval manifest must be a JSON object")
                 if (
                     metadata["source"] != "Hva koster strømmen"
                     or metadata["http_status"] != 200
@@ -105,10 +104,10 @@ def select_inputs(bronze_root, start, end, areas):
                     raise ValueError("Expected a nonempty JSON array")
                 for record in payload:
                     if not isinstance(record, dict):
-                        raise ValueError("Every interval must be a JSON object")
+                        raise TypeError("Every interval must be a JSON object")
                     for field in RAW_FIELDS:
                         if isinstance(record.get(field), (dict, list)):
-                            raise ValueError(f"Nested value in scalar field {field}")
+                            raise TypeError(f"Nested value in scalar field {field}")
                 if metadata["record_count"] != len(payload):
                     raise ValueError("Manifest record count differs from raw array")
 
@@ -123,9 +122,7 @@ def select_inputs(bronze_root, start, end, areas):
                         "requested_date": str(day),
                         "source_file": str(raw_file),
                         "source_sha256": metadata["sha256"],
-                        "retrieved_at_utc": retrieved.astimezone(
-                            timezone.utc
-                        ).isoformat(),
+                        "retrieved_at_utc": retrieved.astimezone(UTC).isoformat(),
                         "retrieval_manifest": str(manifest.resolve()),
                         "expected_start_seconds": int(local_start.timestamp()),
                         "expected_end_seconds": int(local_end.timestamp()),
@@ -352,7 +349,7 @@ def run(bronze_root, output_root, start, end, areas, spark, run_id=None):
     run_info = {
         "run_id": run_id,
         "status": "started",
-        "started_at_utc": datetime.now(timezone.utc).isoformat(),
+        "started_at_utc": datetime.now(UTC).isoformat(),
         "rule_version": RULE_VERSION,
         "start_date": start,
         "end_date_exclusive": end,
@@ -451,7 +448,7 @@ def run(bronze_root, output_root, start, end, areas, spark, run_id=None):
 
     finally:
         # Release our cached DataFrames, but leave the caller's Spark session open.
-        run_info["finished_at_utc"] = datetime.now(timezone.utc).isoformat()
+        run_info["finished_at_utc"] = datetime.now(UTC).isoformat()
         write_json(output / "run.json", run_info)
         for frame in cached_frames:
             frame.unpersist()
