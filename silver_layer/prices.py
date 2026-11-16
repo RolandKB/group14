@@ -10,6 +10,8 @@ from zoneinfo import ZoneInfo
 
 from pyspark.sql import Window, functions as F
 
+from common.storage import write_json
+
 PRICE_AREAS = ("NO1", "NO2", "NO3", "NO4", "NO5")
 RAW_FIELDS = ("NOK_per_kWh", "EUR_per_kWh", "EXR", "time_start", "time_end")
 
@@ -27,17 +29,6 @@ INPUT_SCHEMA = """price_area STRING, requested_date STRING, source_file STRING,
     expected_start_seconds LONG, expected_end_seconds LONG, source_rows LONG"""
 
 RULE_VERSION = "prices-v1"
-
-
-def save_json(path, payload):
-    # Write a temporary file first, then replace the destination.
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(f".{uuid4().hex}.tmp")
-    try:
-        temporary.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n")
-        os.replace(temporary, path)
-    finally:
-        temporary.unlink(missing_ok=True)
 
 
 def validate_scope(start, end, areas):
@@ -367,13 +358,13 @@ def run(bronze_root, output_root, start, end, areas, spark):
         "bronze_root": str(bronze_root),
         "output": str(output),
     }
-    save_json(output / "run.json", run_info)
+    write_json(output / "run.json", run_info)
     cached_frames = []
 
     try:
         # Select the latest retrieval for each requested area/day, then read and normalize them.
         selected, failures = select_inputs(bronze_root, start, end, areas)
-        save_json(output / "inputs.json", {"selected": selected, "failures": failures})
+        write_json(output / "inputs.json", {"selected": selected, "failures": failures})
         spark.conf.set("spark.sql.session.timeZone", "UTC")
         run_info["spark_version"] = spark.version
 
@@ -447,7 +438,7 @@ def run(bronze_root, output_root, start, end, areas, spark):
         # Save both the usable subset and the evidence explaining exclusions.
         accepted.write.parquet(str(output / "accepted"))
         quarantine.write.parquet(str(output / "quarantine"))
-        save_json(output / "quality.json", quality)
+        write_json(output / "quality.json", quality)
         run_info["status"] = "partial" if failures or invalid_days else "success"
 
     except BaseException as exc:
@@ -458,7 +449,7 @@ def run(bronze_root, output_root, start, end, areas, spark):
     finally:
         # Release our cached DataFrames, but leave the caller's Spark session open.
         run_info["finished_at_utc"] = datetime.now(timezone.utc).isoformat()
-        save_json(output / "run.json", run_info)
+        write_json(output / "run.json", run_info)
         for frame in cached_frames:
             frame.unpersist()
 

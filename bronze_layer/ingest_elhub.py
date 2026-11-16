@@ -13,7 +13,7 @@ from urllib.parse import unquote, urlparse
 
 import requests
 
-from bronze_layer.bronze_common import write_json
+from common.storage import write_json
 
 LOG = logging.getLogger(__name__)
 

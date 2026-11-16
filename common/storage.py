@@ -1,4 +1,4 @@
-"""Shared helpers for Bronze-layer ingestion."""
+"""Shared helpers for reading and writing data to disk."""
 
 import json
 from pathlib import Path

@@ -25,7 +25,7 @@ from pathlib import Path
 import geopandas as gpd
 from shapely.strtree import STRtree
 
-from bronze_layer.bronze_common import write_json
+from common.storage import write_json
 
 LOG = logging.getLogger(__name__)
 DEFAULT_BRONZE_ROOT = Path("data/bronze")

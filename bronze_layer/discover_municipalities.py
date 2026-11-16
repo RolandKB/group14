@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from bronze_layer.bronze_common import write_json
+from common.storage import write_json
 
 LOG = logging.getLogger(__name__)
 

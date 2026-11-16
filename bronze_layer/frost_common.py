@@ -11,7 +11,7 @@ from uuid import uuid4
 import requests
 from dotenv import load_dotenv
 
-from bronze_layer.bronze_common import write_json
+from common.storage import write_json
 
 BASE = "https://frost.met.no"
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
