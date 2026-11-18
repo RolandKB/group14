@@ -1,101 +1,93 @@
-"""Generate a municipality-neighbor JSON file from Kartverket GeoJSON.
-
-Input: a GeoJSON file or a ZIP containing exactly one GeoJSON.
-Adjacency: geometries touch, including point-only contacts.
-"""
+"""Create a municipality-neighbor mapping from Kartverket GeoJSON."""
 
 import hashlib
 import json
-import logging
+import shutil
 import tempfile
-from uuid import uuid4
 import zipfile
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
+from uuid import uuid4
 
 import geopandas as gpd
 
-LOG = logging.getLogger(__name__)
-DEFAULT_SILVER_ROOT = Path("data/silver")
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+BRONZE_ROOT = PROJECT_ROOT / "data" / "bronze" / "kartverket"
+SILVER_ROOT = PROJECT_ROOT / "data" / "silver"
 DATASET = "geonorge/administrative_enheter_kommuner"
 
 
-def ensure_run_id(run_id: str | None = None) -> str:
-    return run_id or uuid4().hex
-
-
-def write_json(path: Path, payload: object) -> None:
-    print(f"Writing {path}...")
+def write_json(path: Path, data: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8") as handle:
-        json.dump(payload, handle, indent=2, ensure_ascii=False)
-        handle.write("\n")
+    with path.open("w", encoding="utf-8") as file:
+        json.dump(data, file, indent=2, ensure_ascii=False)
+        file.write("\n")
+
 
 def sha256_file(path: Path) -> str:
-    with path.open("rb") as handle:
-        return hashlib.file_digest(handle, "sha256").hexdigest()
+    digest = hashlib.sha256()
+    with path.open("rb") as file:
+        for chunk in iter(lambda: file.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def load_geodata(path: Path) -> gpd.GeoDataFrame:
+    """Read a GeoJSON file, or the single GeoJSON inside a ZIP archive."""
     if path.suffix.lower() != ".zip":
         return gpd.read_file(path)
 
     with zipfile.ZipFile(path) as archive:
-        names = [
-            info.filename
-            for info in archive.infolist()
-            if not info.is_dir() and info.filename.lower().endswith((".geojson", ".json"))
+        geojson_files = [
+            name for name in archive.namelist()
+            if not name.endswith("/") and name.lower().endswith((".geojson", ".json"))
         ]
-        if len(names) != 1:
-            raise ValueError(f"Expected exactly one GeoJSON in ZIP; found {names}")
+        if len(geojson_files) != 1:
+            raise ValueError(f"Expected one GeoJSON in ZIP, found: {geojson_files}")
 
         with tempfile.TemporaryDirectory() as directory:
             extracted = Path(directory) / "municipalities.geojson"
-            with archive.open(names[0]) as source, extracted.open("wb") as target:
-                import shutil
+            with archive.open(geojson_files[0]) as source, extracted.open("wb") as target:
                 shutil.copyfileobj(source, target)
             return gpd.read_file(extracted)
 
 
 def normalize_code(value: object) -> str:
+    """Convert municipality codes such as 301 into '0301'."""
     if value is None:
-        raise ValueError("A municipality feature has no kommunenummer")
+        raise ValueError("Missing municipality code")
     code = str(value).strip().removesuffix(".0")
     if not code.isdigit() or len(code) > 4:
-        raise ValueError(f"Unexpected municipality code: {value!r}")
+        raise ValueError(f"Invalid municipality code: {value!r}")
     return code.zfill(4)
 
 
 def generate_neighbors(
-    input_path: Path,
-    output: Path | None = None,
-    silver_root: Path = DEFAULT_SILVER_ROOT,
+    input_path: str | Path,
+    output: str | Path | None = None,
+    silver_root: str | Path = SILVER_ROOT,
     code_column: str = "kommunenummer",
     type_column: str = "objtype",
     municipality_type: str = "Kommune",
     run_id: str | None = None,
 ) -> Path:
-    """Write a symmetric mapping of municipality codes to touching municipalities."""
-    run_id = ensure_run_id(run_id)
+    """Generate and save a symmetric municipality-to-neighbors JSON mapping."""
+    run_id = run_id or uuid4().hex
     input_path = Path(input_path)
     if not input_path.is_file():
-        raise FileNotFoundError(f"Input file not found: {input_path}")
+        raise FileNotFoundError(f"Kartverket file not found: {input_path}")
 
-    try:
-        gdf = load_geodata(input_path)
-    except Exception as exc:
-        raise ValueError(f"Could not read input dataset: {exc}") from exc
-
+    gdf = load_geodata(input_path)
     for column in (code_column, type_column):
         if column not in gdf.columns:
-            raise ValueError(f"Required column {column!r} not found; available: {list(gdf.columns)}")
+            raise ValueError(f"Missing column {column!r}. Available: {list(gdf.columns)}")
 
-    gdf = gdf.loc[gdf[type_column].eq(municipality_type)].copy()
+    gdf = gdf.loc[gdf[type_column] == municipality_type].copy()
     gdf = gdf.loc[gdf.geometry.notna() & ~gdf.geometry.is_empty].copy()
     if gdf.empty:
-        raise ValueError(f"No nonempty municipality geometries with {type_column}={municipality_type!r}")
+        raise ValueError("No municipality geometries found")
     if gdf.crs is None:
-        raise ValueError("Input has no coordinate reference system (CRS)")
+        raise ValueError("Input GeoJSON has no coordinate reference system (CRS)")
 
     gdf["code"] = gdf[code_column].map(normalize_code)
     if gdf["code"].duplicated().any():
@@ -106,19 +98,24 @@ def generate_neighbors(
         raise ValueError(f"Invalid municipality geometries: {invalid}")
 
     polygons = gdf[["code", "geometry"]]
-    pairs = gpd.sjoin(polygons, polygons, how="inner", predicate="touches", lsuffix="left", rsuffix="right")
+    touching = gpd.sjoin(
+        polygons, polygons, how="inner", predicate="touches",
+        lsuffix="left", rsuffix="right",
+    )
+
     neighbors = {code: set() for code in polygons["code"]}
-    for a, b in zip(pairs["code_left"], pairs["code_right"]):
-        if a != b:
-            neighbors[a].add(b)
-            neighbors[b].add(a)
+    for left, right in zip(touching["code_left"], touching["code_right"]):
+        if left != right:
+            neighbors[left].add(right)
+            neighbors[right].add(left)
 
     result = {code: sorted(neighbors[code]) for code in sorted(neighbors)}
     if any(a not in result.get(b, []) for a, adjacent in result.items() for b in adjacent):
-        raise ValueError("Symmetry validation failed")
+        raise ValueError("Neighbor symmetry check failed")
 
-    output = Path(output) if output is not None else silver_root / DATASET / "municipality_neighbors.json"
-    output.parent.mkdir(parents=True, exist_ok=True)
+    if output is None:
+        output = Path(silver_root) / DATASET / "municipality_neighbors.json"
+    output = Path(output)
     write_json(output, result)
 
     metadata = {
@@ -127,22 +124,15 @@ def generate_neighbors(
         "dataset": DATASET,
         "source_file": str(input_path),
         "source_sha256": sha256_file(input_path),
-        "source_metadata_file": (
-            str(input_path.with_name(input_path.name + ".metadata.json"))
-            if input_path.with_name(input_path.name + ".metadata.json").exists()
-            else None
-        ),
-        "generated_at_utc": datetime.now(UTC).isoformat(),
+        "generated_at_utc": datetime.now(timezone.utc).isoformat(),
         "filename": output.name,
-        "format": "json",
-        "size_bytes": output.stat().st_size,
         "sha256": sha256_file(output),
-        "geographic_coverage": "Norway",
+        "size_bytes": output.stat().st_size,
         "coordinate_reference_system": str(gdf.crs),
-        "adjacency_definition": "Municipality geometries touch; includes point-only contacts.",
+        "adjacency_definition": "Geometries touch, including point-only contacts",
         "municipality_count": len(result),
-        "unique_adjacency_pair_count": sum(map(len, result.values())) // 2,
-        "municipality_codes_without_neighbors": [code for code, adjacent in result.items() if not adjacent],
+        "unique_adjacency_pair_count": sum(len(items) for items in result.values()) // 2,
+        "municipality_codes_without_neighbors": [code for code, items in result.items() if not items],
         "parameters": {
             "code_column": code_column,
             "type_column": type_column,
@@ -150,5 +140,5 @@ def generate_neighbors(
         },
     }
     write_json(output.with_name(output.name + ".metadata.json"), metadata)
-    LOG.info("Run %s: wrote %d municipalities and %d pairs to %s", run_id, len(result), metadata["unique_adjacency_pair_count"], output)
+    print(f"Saved {len(result)} municipalities to {output}")
     return output
