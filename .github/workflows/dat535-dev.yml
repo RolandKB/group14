@@ -2,7 +2,7 @@ name: DAT535 — Dev Pipeline
 
 on:
   push:
-    branches: [dev]
+    branches: [dev, dev-rewrite]
   pull_request:
     branches: [dev]
   workflow_dispatch:
