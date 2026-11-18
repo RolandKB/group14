@@ -115,10 +115,7 @@ def ingest(start="2024-01-01", end="2026-01-01", station_ids=None,
                     "candidate_count": len(candidates),
                     "candidates": candidates,
                 }
-                print("%d/%d %s: %s, %d candidate series", index, len(stations),
-                         station, status, len(candidates))
             except (requests.RequestException, ValueError, OSError, json.JSONDecodeError) as exc:
-                print("%d/%d %s: failed: %s", index, len(stations), station, exc)
                 failed.append({"station": station, "error": str(exc)})
                 results[station] = {"status": "failed", "candidate_count": 0, "candidates": []}
     finally:
