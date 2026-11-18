@@ -39,6 +39,24 @@ jobs:
           source ~/spark-env/bin/activate
           python -m pip install -e .
 
+      - name: Prepare Kartverket data
+        env:
+          BRONZE_ROOT: ${{ steps.output-dir.outputs.dir }}/bronze
+        run: |
+          set -euo pipefail
+
+          SOURCE="data/bronze/kartverket/Basisdata_0000_Norge_25833_Kommuner_GeoJSON.zip"
+          TARGET="$BRONZE_ROOT/kartverket"
+
+          test -f "$SOURCE" || {
+            echo "Kartverket ZIP not found at $SOURCE"
+            exit 1
+          }
+
+          mkdir -p "$TARGET"
+          cp "$SOURCE" "$TARGET/"
+          echo "Kartverket ZIP copied to $TARGET"
+
       - name: Run Bronze ingestion
         env:
           BRONZE_ROOT: ${{ steps.output-dir.outputs.dir }}/bronze
