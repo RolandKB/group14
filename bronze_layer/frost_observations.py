@@ -70,6 +70,20 @@ def eligible_stations(start, end, series_root=SERIES_ROOT):
     return sorted(set(stations))
 
 
+def is_no_data_response(response):
+    """Recognize Frost's explicit no-data errors, not arbitrary HTTP errors."""
+    if response.status_code not in (404, 412):
+        return False
+    try:
+        reason = response.json().get("error", {}).get("reason", "")
+    except (ValueError, AttributeError, TypeError):
+        return False
+    if not isinstance(reason, str):
+        return False
+    return ((response.status_code == 404 and reason.startswith("No data found"))
+            or (response.status_code == 412 and reason.startswith("No time series found")))
+
+
 def ingest(start="2024-01-01", end="2026-01-01", station_ids=None,
            root=DEFAULT_ROOT, series_root=SERIES_ROOT, refresh=False, run_id=None):
     """Download monthly air-temperature responses for selected or eligible stations.
@@ -121,13 +135,10 @@ def ingest(start="2024-01-01", end="2026-01-01", station_ids=None,
                             auth=(client_id, ""),
                             timeout=120,
                         )
-                        if response.status_code == 412:
-                            error_payload = response.json()
-                            reason = error_payload.get("error", {}).get("reason", "")
-                            if "No time series found" in reason:
-                                save_json(no_data_file, error_payload)
-                                counts["empty"] += 1
-                                continue
+                        if is_no_data_response(response):
+                            save_json(no_data_file, response.json())
+                            counts["empty"] += 1
+                            continue
                         response.raise_for_status()
                         payload = response.json()
                         if not isinstance(payload.get("data"), list):
