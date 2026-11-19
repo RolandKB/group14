@@ -61,17 +61,6 @@ def extract_csvs(archive_path, target_dir):
     return paths
 
 
-def make_spark(master=None, driver_memory=None):
-    builder = SparkSession.builder.appName("DAT535-Silver-Elhub-Municipality")
-    if master:
-        builder = builder.master(master)
-    if driver_memory:
-        builder = builder.config("spark.driver.memory", driver_memory)
-    spark = builder.getOrCreate()
-    spark.conf.set("spark.sql.session.timeZone", "UTC")
-    return spark
-
-
 def boundary_utc(date_text):
     local = datetime.strptime(date_text, "%Y-%m-%d").replace(tzinfo=ZoneInfo("Europe/Oslo"))
     return local.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
