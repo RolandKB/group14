@@ -98,7 +98,11 @@ def ingest(start="2024-01-01", end="2026-01-01", station_ids=None,
             for first, last in periods:
                 raw_file = (root / f"station={station}" /
                             f"period={first}_to_{last}" / "response.json")
+                no_data_file = raw_file.with_name("no_data.json")
                 try:
+                    if no_data_file.is_file() and not refresh:
+                        counts["empty"] += 1
+                        continue
                     if raw_file.is_file() and not refresh:
                         payload = json.loads(raw_file.read_text(encoding="utf-8"))
                         if not isinstance(payload.get("data"), list):
@@ -117,6 +121,13 @@ def ingest(start="2024-01-01", end="2026-01-01", station_ids=None,
                             auth=(client_id, ""),
                             timeout=120,
                         )
+                        if response.status_code == 412:
+                            error_payload = response.json()
+                            reason = error_payload.get("error", {}).get("reason", "")
+                            if "No time series found" in reason:
+                                save_json(no_data_file, error_payload)
+                                counts["empty"] += 1
+                                continue
                         response.raise_for_status()
                         payload = response.json()
                         if not isinstance(payload.get("data"), list):
