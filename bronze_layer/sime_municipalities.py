@@ -29,7 +29,7 @@ def save_json(path, data):
 def validate(payload):
     """Check the fields needed by the downstream Silver join."""
     if not isinstance(payload, dict) or not isinstance(payload.get("kommuner"), list):
-        raise ValueError("Expected an object with a 'kommuner' list")
+        raise TypeError("Expected an object with a 'kommuner' list")
     if not payload["kommuner"]:
         raise ValueError("Municipality list is empty")
 
@@ -37,7 +37,7 @@ def validate(payload):
     multi_area = []
     for municipality in payload["kommuner"]:
         if not isinstance(municipality, dict):
-            raise ValueError("Each municipality must be a JSON object")
+            raise TypeError("Each municipality must be a JSON object")
         code = municipality.get("number")
         area = municipality.get("priceArea")
         areas = municipality.get("priceAreas")

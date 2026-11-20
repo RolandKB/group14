@@ -62,7 +62,7 @@ def ingest(root=DEFAULT_OUTPUT, refresh=False, run_id=None):
     stations = payload.get("data", [])
 
     if not isinstance(stations, list):
-        raise ValueError("Cached Frost response has no valid data list")
+        raise TypeError("Cached Frost response has no valid data list")
 
     station_ids = sorted({station["id"] for station in stations if station.get("id")})
     total = payload.get("totalItemCount")

@@ -67,7 +67,7 @@ def eligible_stations(start, end, series_root=SERIES_ROOT):
     for raw_file in sorted(series_root.glob("station=*/response.json")):
         payload = json.loads(raw_file.read_text(encoding="utf-8"))
         if not isinstance(payload.get("data"), list):
-            raise ValueError(f"Invalid series cache: {raw_file}")
+            raise TypeError(f"Invalid series cache: {raw_file}")
         if temperature_candidates(payload, start, end):
             stations.append(raw_file.parent.name.removeprefix("station="))
     if not list(series_root.glob("station=*/response.json")):
