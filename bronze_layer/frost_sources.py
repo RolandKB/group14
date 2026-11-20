@@ -47,10 +47,12 @@ def ingest(root=DEFAULT_OUTPUT, refresh=False, run_id=None):
             timeout=60,
         )
 
-        response.raise_for_status() # Raise an error if the request failed
+        response.raise_for_status()  # Raise an error if the request failed
         payload = response.json()
 
-        if payload.get("@type") == "ErrorResponse" or not isinstance(payload.get("data"), list):
+        if payload.get("@type") == "ErrorResponse" or not isinstance(
+            payload.get("data"), list
+        ):
             raise ValueError("Frost did not return a valid sources response")
 
         save_json(raw_file, payload)
@@ -66,7 +68,9 @@ def ingest(root=DEFAULT_OUTPUT, refresh=False, run_id=None):
     total = payload.get("totalItemCount")
 
     if total is not None and int(total) != len(stations):
-        print(f"Warning: Frost reports {total} items, but the response contains {len(stations)}")
+        print(
+            f"Warning: Frost reports {total} items, but the response contains {len(stations)}"
+        )
 
     result = {
         "run_id": run_id,
@@ -78,6 +82,6 @@ def ingest(root=DEFAULT_OUTPUT, refresh=False, run_id=None):
         "returned_items": len(stations),
         "reported_total_items": total,
     }
-    
+
     save_json(root / "_runs" / f"{run_id}.json", result)
     return result

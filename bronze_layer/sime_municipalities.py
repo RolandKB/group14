@@ -18,7 +18,9 @@ def save_json(path, data):
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(path.name + ".tmp")
     try:
-        temporary.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        temporary.write_text(
+            json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+        )
         temporary.replace(path)
     finally:
         temporary.unlink(missing_ok=True)
@@ -51,8 +53,11 @@ def validate(payload):
         if len(areas) > 1:
             multi_area.append(code)
 
-    return {"municipality_count": len(seen), "multi_area_count": len(multi_area),
-            "multi_area_codes": multi_area}
+    return {
+        "municipality_count": len(seen),
+        "multi_area_count": len(multi_area),
+        "multi_area_codes": multi_area,
+    }
 
 
 def download(session):
@@ -64,9 +69,11 @@ def download(session):
             return response
         except requests.RequestException as exc:
             status = exc.response.status_code if exc.response is not None else None
-            if attempt == 3 or (status is not None and status not in (429, 500, 502, 503, 504)):
+            if attempt == 3 or (
+                status is not None and status not in (429, 500, 502, 503, 504)
+            ):
                 raise
-            time.sleep(2 ** attempt)
+            time.sleep(2**attempt)
 
 
 def ingest(root=DEFAULT_ROOT, refresh=False, run_id=None):
@@ -74,8 +81,12 @@ def ingest(root=DEFAULT_ROOT, refresh=False, run_id=None):
     root = Path(root)
     run_id = run_id or uuid4().hex
     raw_path = root / "response.json"
-    result = {"run_id": run_id, "status": "started", "url": URL,
-              "started_at_utc": datetime.now(timezone.utc).isoformat()}
+    result = {
+        "run_id": run_id,
+        "status": "started",
+        "url": URL,
+        "started_at_utc": datetime.now(timezone.utc).isoformat(),
+    }
 
     try:
         if raw_path.exists() and not refresh:
@@ -103,15 +114,23 @@ def ingest(root=DEFAULT_ROOT, refresh=False, run_id=None):
         finally:
             temporary.unlink(missing_ok=True)
 
-        metadata = {"source": "Sime", "url": URL,
-                    "retrieved_at_utc": datetime.now(timezone.utc).isoformat(),
-                    "run_id": run_id, "response_file": raw_path.name,
-                    "http_status": response.status_code, "size_bytes": len(response.content),
-                    **stats, "attribution": payload.get("attribution")}
+        metadata = {
+            "source": "Sime",
+            "url": URL,
+            "retrieved_at_utc": datetime.now(timezone.utc).isoformat(),
+            "run_id": run_id,
+            "response_file": raw_path.name,
+            "http_status": response.status_code,
+            "size_bytes": len(response.content),
+            **stats,
+            "attribution": payload.get("attribution"),
+        }
         save_json(root / "metadata.json", metadata)
         result.update(status="downloaded", **stats)
-        print(f"Downloaded: {stats['municipality_count']} municipalities "
-              f"({stats['multi_area_count']} with multiple price areas)")
+        print(
+            f"Downloaded: {stats['municipality_count']} municipalities "
+            f"({stats['multi_area_count']} with multiple price areas)"
+        )
     except (requests.RequestException, ValueError, TypeError, OSError) as exc:
         result.update(status="failed", error=str(exc))
         raise

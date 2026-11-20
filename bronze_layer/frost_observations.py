@@ -23,7 +23,9 @@ def save_json(path, data):
     path.parent.mkdir(parents=True, exist_ok=True)
     # Write to a temporary file first to avoid partial cache files.
     temporary = path.with_name(path.name + ".tmp")
-    temporary.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    temporary.write_text(
+        json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
     temporary.replace(path)
 
 
@@ -34,7 +36,9 @@ def months(start, end):
     if current >= limit:
         raise ValueError("start must be earlier than end")
     while current < limit:
-        following = date(current.year + (current.month == 12), current.month % 12 + 1, 1)
+        following = date(
+            current.year + (current.month == 12), current.month % 12 + 1, 1
+        )
         stop = min(following, limit)
         yield current.isoformat(), stop.isoformat()
         current = stop
@@ -80,12 +84,20 @@ def is_no_data_response(response):
         return False
     if not isinstance(reason, str):
         return False
-    return ((response.status_code == 404 and reason.startswith("No data found"))
-            or (response.status_code == 412 and reason.startswith("No time series found")))
+    return (response.status_code == 404 and reason.startswith("No data found")) or (
+        response.status_code == 412 and reason.startswith("No time series found")
+    )
 
 
-def ingest(start="2024-01-01", end="2026-01-01", station_ids=None,
-           root=DEFAULT_ROOT, series_root=SERIES_ROOT, refresh=False, run_id=None):
+def ingest(
+    start="2024-01-01",
+    end="2026-01-01",
+    station_ids=None,
+    root=DEFAULT_ROOT,
+    series_root=SERIES_ROOT,
+    refresh=False,
+    run_id=None,
+):
     """Download monthly air-temperature responses for selected or eligible stations.
 
     station_ids=None: automatically use eligible stations from frost_series cache.
@@ -93,8 +105,11 @@ def ingest(start="2024-01-01", end="2026-01-01", station_ids=None,
     A cached month is not downloaded again unless refresh=True.
     """
     periods = list(months(start, end))
-    stations = (sorted(set(station_ids)) if station_ids is not None
-                else eligible_stations(start, end, series_root))
+    stations = (
+        sorted(set(station_ids))
+        if station_ids is not None
+        else eligible_stations(start, end, series_root)
+    )
     run_id = run_id or uuid4().hex
     root = Path(root)
     counts = {"downloaded": 0, "cached": 0, "empty": 0, "failed": 0}
@@ -110,8 +125,12 @@ def ingest(start="2024-01-01", end="2026-01-01", station_ids=None,
     try:
         for station in stations:
             for first, last in periods:
-                raw_file = (root / f"station={station}" /
-                            f"period={first}_to_{last}" / "response.json")
+                raw_file = (
+                    root
+                    / f"station={station}"
+                    / f"period={first}_to_{last}"
+                    / "response.json"
+                )
                 no_data_file = raw_file.with_name("no_data.json")
                 try:
                     if no_data_file.is_file() and not refresh:
@@ -124,11 +143,15 @@ def ingest(start="2024-01-01", end="2026-01-01", station_ids=None,
                         counts["cached"] += 1
                     else:
                         if not client_id:
-                            raise ValueError("Set FROST_CLIENT_ID before downloading Frost data")
+                            raise ValueError(
+                                "Set FROST_CLIENT_ID before downloading Frost data"
+                            )
                         response = session.get(
                             API_URL,
                             params={
-                                "sources": station if ":" in station else f"{station}:all",
+                                "sources": station
+                                if ":" in station
+                                else f"{station}:all",
                                 "referencetime": f"{first}/{last}",
                                 "elements": "air_temperature",
                             },
@@ -147,15 +170,29 @@ def ingest(start="2024-01-01", end="2026-01-01", station_ids=None,
                         counts["downloaded"] += 1
                     if not payload["data"]:
                         counts["empty"] += 1
-                except (requests.RequestException, ValueError, OSError, json.JSONDecodeError) as exc:
+                except (
+                    requests.RequestException,
+                    ValueError,
+                    OSError,
+                    json.JSONDecodeError,
+                ) as exc:
                     counts["failed"] += 1
-                    failures.append({"station": station, "start": first, "end": last,
-                                     "error": str(exc)})
+                    failures.append(
+                        {
+                            "station": station,
+                            "start": first,
+                            "end": last,
+                            "error": str(exc),
+                        }
+                    )
                 finally:
                     progress.update(1)
-                    progress.set_postfix(downloaded=counts["downloaded"],
-                                         cached=counts["cached"], empty=counts["empty"],
-                                         failed=counts["failed"])
+                    progress.set_postfix(
+                        downloaded=counts["downloaded"],
+                        cached=counts["cached"],
+                        empty=counts["empty"],
+                        failed=counts["failed"],
+                    )
     finally:
         progress.close()
         session.close()

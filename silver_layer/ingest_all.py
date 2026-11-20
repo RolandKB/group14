@@ -25,8 +25,15 @@ def save_report(path, report):
     path.write_text(json.dumps(report, indent=2, default=str) + "\n", encoding="utf-8")
 
 
-def ingest_all(bronze_root, silver_root, start="2024-01-01", end="2026-01-01",
-               master="local[2]", driver_memory="6g", shuffle_partitions=16):
+def ingest_all(
+    bronze_root,
+    silver_root,
+    start="2024-01-01",
+    end="2026-01-01",
+    master="local[2]",
+    driver_memory="6g",
+    shuffle_partitions=16,
+):
     """Run datasets in order, stop on failure, and always write a run report."""
     if date.fromisoformat(start) >= date.fromisoformat(end):
         raise ValueError("start must be before end (exclusive)")
@@ -63,8 +70,7 @@ def ingest_all(bronze_root, silver_root, start="2024-01-01", end="2026-01-01",
 
     try:
         spark = (
-            SparkSession.builder
-            .appName("DAT535 Silver Pipeline")
+            SparkSession.builder.appName("DAT535 Silver Pipeline")
             .master(master)
             .config("spark.driver.memory", driver_memory)
             .config("spark.sql.session.timeZone", "UTC")
@@ -87,58 +93,81 @@ def ingest_all(bronze_root, silver_root, start="2024-01-01", end="2026-01-01",
 
                 if not isinstance(result, dict):
                     raise TypeError(f"{name}.ingest() must return a dictionary")
-                if result.get("status") not in ("success", "cached", "success_with_quarantine"):
-                    raise RuntimeError(f"Unexpected status for {name}: {result.get('status')}")
-                
+                if result.get("status") not in (
+                    "success",
+                    "cached",
+                    "success_with_quarantine",
+                ):
+                    raise RuntimeError(
+                        f"Unexpected status for {name}: {result.get('status')}"
+                    )
+
                 report["steps"][name] = {
                     "status": result["status"],
-                    "seconds": round((datetime.now(timezone.utc) - started).total_seconds(), 2),
+                    "seconds": round(
+                        (datetime.now(timezone.utc) - started).total_seconds(), 2
+                    ),
                     "result": result,
                 }
-                
+
                 print(f"Silver {name}: {result['status']}", flush=True)
 
             except Exception as exc:
                 report["steps"][name] = {
                     "status": "failed",
-                    "seconds": round((datetime.now(timezone.utc) - started).total_seconds(), 2),
+                    "seconds": round(
+                        (datetime.now(timezone.utc) - started).total_seconds(), 2
+                    ),
                     "error": str(exc),
                 }
                 raise
 
         report["status"] = "success"
         return report
-    
+
     except Exception as exc:
         report["status"] = "failed"
         report["error"] = str(exc)
         raise
-    
+
     finally:
         report["finished_at_utc"] = datetime.now(timezone.utc).isoformat()
         save_report(report_path, report)
-        print(f"\nSilver pipeline: {report['status']} | Report: {report_path}", flush=True)
+        print(
+            f"\nSilver pipeline: {report['status']} | Report: {report_path}", flush=True
+        )
         if spark is not None:
             spark.stop()
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--bronze-root", type=Path, default=PROJECT_ROOT / "data" / "bronze")
-    parser.add_argument("--silver-root", type=Path, default=PROJECT_ROOT / "data" / "silver")
+    parser.add_argument(
+        "--bronze-root", type=Path, default=PROJECT_ROOT / "data" / "bronze"
+    )
+    parser.add_argument(
+        "--silver-root", type=Path, default=PROJECT_ROOT / "data" / "silver"
+    )
     parser.add_argument("--start", default="2024-01-01")
     parser.add_argument("--end", default="2026-01-01", help="Exclusive end date")
     parser.add_argument("--master", default="local[2]")
     parser.add_argument("--driver-memory", default="6g")
     parser.add_argument("--shuffle-partitions", type=int, default=16)
-    
+
     args = parser.parse_args()
-    
+
     if args.shuffle_partitions < 1:
         parser.error("--shuffle-partitions must be positive")
-    
-    ingest_all(args.bronze_root, args.silver_root, args.start, args.end,
-               args.master, args.driver_memory, args.shuffle_partitions)
+
+    ingest_all(
+        args.bronze_root,
+        args.silver_root,
+        args.start,
+        args.end,
+        args.master,
+        args.driver_memory,
+        args.shuffle_partitions,
+    )
 
 
 if __name__ == "__main__":

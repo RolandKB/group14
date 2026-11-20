@@ -43,7 +43,10 @@ def latest_archive(bronze_root):
     if not archives:
         raise FileNotFoundError(f"No ZIP archive found in {directory}")
     if len(archives) > 1:
-        print(f"Found {len(archives)} archives. Using newest: {archives[0].name}", flush=True)
+        print(
+            f"Found {len(archives)} archives. Using newest: {archives[0].name}",
+            flush=True,
+        )
     return archives[0]
 
 
@@ -52,7 +55,8 @@ def extract_csvs(archive_path, target_dir):
     paths = []
     with zipfile.ZipFile(archive_path) as archive:
         members = [
-            member for member in archive.infolist()
+            member
+            for member in archive.infolist()
             if not member.is_dir() and member.filename.lower().endswith(".csv")
         ]
         if not members:
@@ -93,9 +97,8 @@ def transform(raw, start="2024-01-01", end="2026-01-01"):
         F.to_timestamp("LAST_UPDATE_TIME", TIME_PATTERN).alias("last_update_time"),
     )
 
-    in_period = (
-        (F.col("start_time") >= F.lit(start_utc).cast("timestamp"))
-        & (F.col("start_time") < F.lit(end_utc).cast("timestamp"))
+    in_period = (F.col("start_time") >= F.lit(start_utc).cast("timestamp")) & (
+        F.col("start_time") < F.lit(end_utc).cast("timestamp")
     )
     # Keep rows with unparseable start times so validation can report them.
     candidates = df.where(in_period | F.col("start_time").isNull())
@@ -167,10 +170,12 @@ def ingest(
     try:
         with tempfile.TemporaryDirectory(prefix="dat535-elhub-price-area-") as tmp:
             paths = extract_csvs(archive, tmp)
-            print(f"Extracted {len(paths)} CSV file(s). Processing with Spark", flush=True)
-            schema = T.StructType([
-                T.StructField(column, T.StringType(), True) for column in COLUMNS
-            ])
+            print(
+                f"Extracted {len(paths)} CSV file(s). Processing with Spark", flush=True
+            )
+            schema = T.StructType(
+                [T.StructField(column, T.StringType(), True) for column in COLUMNS]
+            )
             raw = (
                 spark.read.option("header", "true")
                 .option("mode", "FAILFAST")

@@ -17,22 +17,26 @@ DATASET = "municipality_price_areas"
 VERSION = "municipality-price-areas-v1"
 AREAS = {"NO1", "NO2", "NO3", "NO4", "NO5"}
 
-SILVER_SCHEMA = T.StructType([
-    T.StructField("municipality_code", T.StringType(), False),
-    T.StructField("municipality_name", T.StringType(), True),
-    T.StructField("price_area", T.StringType(), False),
-    T.StructField("primary_price_area", T.StringType(), False),
-    T.StructField("is_overlapping", T.BooleanType(), False),
-])
+SILVER_SCHEMA = T.StructType(
+    [
+        T.StructField("municipality_code", T.StringType(), False),
+        T.StructField("municipality_name", T.StringType(), True),
+        T.StructField("price_area", T.StringType(), False),
+        T.StructField("primary_price_area", T.StringType(), False),
+        T.StructField("is_overlapping", T.BooleanType(), False),
+    ]
+)
 
-QUARANTINE_SCHEMA = T.StructType([
-    T.StructField("municipality_code", T.StringType(), True),
-    T.StructField("municipality_name", T.StringType(), True),
-    T.StructField("primary_price_area", T.StringType(), True),
-    T.StructField("price_areas", T.StringType(), True),
-    T.StructField("quarantine_reason", T.StringType(), False),
-    T.StructField("_source_file", T.StringType(), False),
-])
+QUARANTINE_SCHEMA = T.StructType(
+    [
+        T.StructField("municipality_code", T.StringType(), True),
+        T.StructField("municipality_name", T.StringType(), True),
+        T.StructField("primary_price_area", T.StringType(), True),
+        T.StructField("price_areas", T.StringType(), True),
+        T.StructField("quarantine_reason", T.StringType(), False),
+        T.StructField("_source_file", T.StringType(), False),
+    ]
+)
 
 
 def source_paths(bronze_root):
@@ -47,30 +51,40 @@ def source_paths(bronze_root):
 
 def source_fingerprint(sime, kartverket, start, end):
     digest = hashlib.sha256()
-    
+
     for path in (sime, kartverket):
         digest.update(path.name.encode("utf-8"))
         digest.update(bytes.fromhex(cache.sha256_file(path)))
-    
-    return {"source_sha256": digest.hexdigest(), "transformation_version": VERSION,
-            "start": start, "end_exclusive": end}
+
+    return {
+        "source_sha256": digest.hexdigest(),
+        "transformation_version": VERSION,
+        "start": start,
+        "end_exclusive": end,
+    }
 
 
 def municipality_codes(zip_path):
     """Read Kartverket GeoJSON and return a set of valid municipality codes."""
 
     with zipfile.ZipFile(zip_path) as archive:
-        names = [name for name in archive.namelist() if name.lower().endswith((".geojson", ".json"))]
-    
+        names = [
+            name
+            for name in archive.namelist()
+            if name.lower().endswith((".geojson", ".json"))
+        ]
+
         if len(names) != 1:
             raise ValueError(f"Expected one Kartverket GeoJSON, found {len(names)}")
-    
+
         with archive.open(names[0]) as handle:
             payload = json.load(handle)
 
-    if payload.get("type") != "FeatureCollection" or not isinstance(payload.get("features"), list):
+    if payload.get("type") != "FeatureCollection" or not isinstance(
+        payload.get("features"), list
+    ):
         raise ValueError("Invalid Kartverket GeoJSON FeatureCollection")
-    
+
     codes = []
     for feature in payload["features"]:
         properties = feature.get("properties") or {}
@@ -80,23 +94,29 @@ def municipality_codes(zip_path):
         code = str(properties.get("kommunenummer") or "").strip()
         if len(code) != 4 or not code.isdigit():
             raise ValueError(f"Invalid Kartverket municipality code: {code!r}")
-        
+
         codes.append(code)
     if not codes or len(codes) != len(set(codes)):
         raise ValueError("Kartverket municipality codes are empty or duplicated")
-    
+
     return set(codes)
 
 
 def prepare(sime_payload, kartverket_codes, source_path):
     """Quarantine a whole Sime municipality if its mapping is invalid."""
-    if not isinstance(sime_payload, dict) or not isinstance(sime_payload.get("kommuner"), list):
+    if not isinstance(sime_payload, dict) or not isinstance(
+        sime_payload.get("kommuner"), list
+    ):
         raise ValueError("Invalid Sime JSON: expected a 'kommuner' array")
-    
+
     accepted, rejected = [], []
     records = sime_payload["kommuner"]
-    counts = Counter(str(item.get("number") or "").strip() for item in records if isinstance(item, dict))
-    
+    counts = Counter(
+        str(item.get("number") or "").strip()
+        for item in records
+        if isinstance(item, dict)
+    )
+
     for item in records:
         if not isinstance(item, dict):
             item = {}
@@ -115,7 +135,11 @@ def prepare(sime_payload, kartverket_codes, source_path):
             reason = "NOT_IN_KARTVERKET"
         elif not name:
             reason = "MISSING_MUNICIPALITY_NAME"
-        elif not isinstance(areas, list) or not areas or any(not isinstance(a, str) or a not in AREAS for a in areas):
+        elif (
+            not isinstance(areas, list)
+            or not areas
+            or any(not isinstance(a, str) or a not in AREAS for a in areas)
+        ):
             reason = "INVALID_PRICE_AREAS"
         elif len(areas) != len(set(areas)):
             reason = "DUPLICATE_PRICE_AREA"
@@ -129,7 +153,7 @@ def prepare(sime_payload, kartverket_codes, source_path):
         else:
             for area in areas:
                 accepted.append((code, name, area, primary, len(areas) > 1))
-    
+
     return accepted, rejected
 
 
@@ -140,60 +164,91 @@ def _quarantine_cached(output, fingerprint):
         return False
     try:
         manifest = cache.read_manifest(output)
-        return (manifest.get("fingerprint") == fingerprint
-                and isinstance(manifest.get("rows"), int) and manifest["rows"] >= 0)
+        return (
+            manifest.get("fingerprint") == fingerprint
+            and isinstance(manifest.get("rows"), int)
+            and manifest["rows"] >= 0
+        )
     except (OSError, ValueError, TypeError):
         return False
 
 
-def ingest(bronze_root=DEFAULT_BRONZE_ROOT, silver_root=DEFAULT_SILVER_ROOT, start="2024-01-01", end="2026-01-01", spark=None, run_id=None):
+def ingest(
+    bronze_root=DEFAULT_BRONZE_ROOT,
+    silver_root=DEFAULT_SILVER_ROOT,
+    start="2024-01-01",
+    end="2026-01-01",
+    spark=None,
+    run_id=None,
+):
     """Publish Silver mapping and row-level quarantine using the shared cache."""
     if spark is None:
         raise ValueError("Pass an existing SparkSession using spark=...")
     if start >= end:
         raise ValueError("start must precede end")
-    
+
     spark.conf.set("spark.sql.session.timeZone", "UTC")
     sime_path, kartverket_path = source_paths(bronze_root)
     output = Path(silver_root) / "geography" / "municipality_price_areas"
     quarantine_output = Path(silver_root) / "quarantine" / DATASET
     fingerprint = source_fingerprint(sime_path, kartverket_path, start, end)
-    
-    if cache.is_cached(output, fingerprint) and _quarantine_cached(quarantine_output, fingerprint):
-        return {"dataset": DATASET, 
-                "status": "cached",
-                "rows": cache.read_manifest(output)["rows"],
-                "quarantined_rows": cache.read_manifest(quarantine_output)["rows"],
-                "silver_path": str(output), 
-                "quarantine_path": str(quarantine_output)}
+
+    if cache.is_cached(output, fingerprint) and _quarantine_cached(
+        quarantine_output, fingerprint
+    ):
+        return {
+            "dataset": DATASET,
+            "status": "cached",
+            "rows": cache.read_manifest(output)["rows"],
+            "quarantined_rows": cache.read_manifest(quarantine_output)["rows"],
+            "silver_path": str(output),
+            "quarantine_path": str(quarantine_output),
+        }
 
     with sime_path.open(encoding="utf-8") as handle:
         payload = json.load(handle)
 
     codes = municipality_codes(kartverket_path)
     accepted, rejected = prepare(payload, codes, sime_path)
-    
+
     if not accepted:
         raise ValueError("No valid municipality-price-area relationships")
-    
+
     stations = spark.createDataFrame(accepted, SILVER_SCHEMA)
     quarantine = spark.createDataFrame(rejected, QUARANTINE_SCHEMA)
-    stages = [cache.new_staging_directory(output), cache.new_staging_directory(quarantine_output)]
+    stages = [
+        cache.new_staging_directory(output),
+        cache.new_staging_directory(quarantine_output),
+    ]
     try:
         stations.coalesce(1).write.mode("overwrite").parquet(str(stages[0]))
         quarantine.coalesce(1).write.mode("overwrite").parquet(str(stages[1]))
-        for stage, destination, rows in zip(stages, (output, quarantine_output),
-                                            (len(accepted), len(rejected))):
-            cache.publish(stage, destination, {"dataset": DATASET, "fingerprint": fingerprint,
-                                               "run_id": run_id, "rows": rows})
+        for stage, destination, rows in zip(
+            stages, (output, quarantine_output), (len(accepted), len(rejected))
+        ):
+            cache.publish(
+                stage,
+                destination,
+                {
+                    "dataset": DATASET,
+                    "fingerprint": fingerprint,
+                    "run_id": run_id,
+                    "rows": rows,
+                },
+            )
     finally:
         for stage in stages:
             if stage.exists():
                 shutil.rmtree(stage)
-    
-    result = {"dataset": DATASET, "status": "success", "rows": len(accepted),
-              "quarantined_rows": len(rejected), "silver_path": str(output),
-              "quarantine_path": str(quarantine_output)}
-    
+
+    result = {
+        "dataset": DATASET,
+        "status": "success",
+        "rows": len(accepted),
+        "quarantined_rows": len(rejected),
+        "silver_path": str(output),
+        "quarantine_path": str(quarantine_output),
+    }
+
     print(json.dumps(result, indent=2), flush=True)
     return result

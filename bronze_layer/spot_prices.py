@@ -22,7 +22,9 @@ def utc_now():
 def save_json(path, data):
     """Save a JSON summary or metadata file."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    path.write_text(
+        json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
 
 
 def download(session, url, attempts=4):
@@ -37,11 +39,12 @@ def download(session, url, attempts=4):
             retryable = status is None or status in (429, 500, 502, 503, 504)
             if not retryable or attempt == attempts - 1:
                 raise
-            time.sleep(2 ** attempt)
+            time.sleep(2**attempt)
 
 
-def ingest(start, end, areas=PRICE_AREAS, root=DEFAULT_ROOT,
-           refresh=False, run_id=None):
+def ingest(
+    start, end, areas=PRICE_AREAS, root=DEFAULT_ROOT, refresh=False, run_id=None
+):
     """Download daily spot prices for start to end, with end exclusive.
 
     Example: ingest("2024-01-01", "2024-01-03", areas=["NO2"])
@@ -73,11 +76,15 @@ def ingest(start, end, areas=PRICE_AREAS, root=DEFAULT_ROOT,
 
     try:
         with requests.Session() as session:
-            session.headers.update({
-                "Accept": "application/json",
-                "User-Agent": "DAT535-group14/1.0",
-            })
-            with tqdm(total=results["total_requests"], desc="Spot prices", unit="day-area") as bar:
+            session.headers.update(
+                {
+                    "Accept": "application/json",
+                    "User-Agent": "DAT535-group14/1.0",
+                }
+            )
+            with tqdm(
+                total=results["total_requests"], desc="Spot prices", unit="day-area"
+            ) as bar:
                 day = first
                 while day < last:
                     for area in areas:
@@ -89,7 +96,9 @@ def ingest(start, end, areas=PRICE_AREAS, root=DEFAULT_ROOT,
                         try:
                             # Cache only a nonempty, valid JSON list.
                             if raw_path.exists() and not refresh:
-                                cached = json.loads(raw_path.read_text(encoding="utf-8"))
+                                cached = json.loads(
+                                    raw_path.read_text(encoding="utf-8")
+                                )
                                 if isinstance(cached, list) and cached:
                                     results["cached_count"] += 1
                                     continue
@@ -97,7 +106,9 @@ def ingest(start, end, areas=PRICE_AREAS, root=DEFAULT_ROOT,
                             response = download(session, url)
                             payload = response.json()
                             if not isinstance(payload, list) or not payload:
-                                raise ValueError("Expected a nonempty JSON list of price intervals")
+                                raise ValueError(
+                                    "Expected a nonempty JSON list of price intervals"
+                                )
 
                             folder.mkdir(parents=True, exist_ok=True)
                             # Write a temporary file first.
@@ -108,26 +119,35 @@ def ingest(start, end, areas=PRICE_AREAS, root=DEFAULT_ROOT,
                             finally:
                                 temp_path.unlink(missing_ok=True)
 
-                            save_json(metadata_path, {
-                                "source": "Hva koster strømmen",
-                                "url": response.url,
-                                "retrieved_at_utc": utc_now(),
-                                "run_id": run_id,
-                                "price_area": area,
-                                "date": day.isoformat(),
-                                "timezone": "Europe/Oslo",
-                                "record_count": len(payload),
-                            })
+                            save_json(
+                                metadata_path,
+                                {
+                                    "source": "Hva koster strømmen",
+                                    "url": response.url,
+                                    "retrieved_at_utc": utc_now(),
+                                    "run_id": run_id,
+                                    "price_area": area,
+                                    "date": day.isoformat(),
+                                    "timezone": "Europe/Oslo",
+                                    "record_count": len(payload),
+                                },
+                            )
                             results["downloaded_count"] += 1
 
-                        except (requests.RequestException, ValueError, OSError) as error:
+                        except (
+                            requests.RequestException,
+                            ValueError,
+                            OSError,
+                        ) as error:
                             results["failed_count"] += 1
-                            results["failures"].append({
-                                "date": day.isoformat(),
-                                "area": area,
-                                "url": url,
-                                "error": str(error),
-                            })
+                            results["failures"].append(
+                                {
+                                    "date": day.isoformat(),
+                                    "area": area,
+                                    "url": url,
+                                    "error": str(error),
+                                }
+                            )
                         finally:
                             bar.update(1)
                             bar.set_postfix(
@@ -142,16 +162,19 @@ def ingest(start, end, areas=PRICE_AREAS, root=DEFAULT_ROOT,
         status = "failed"
         raise
     finally:
-        save_json(root / "_runs" / f"{run_id}.json", {
-            "run_id": run_id,
-            "started_at_utc": started_at,
-            "finished_at_utc": utc_now(),
-            "status": status,
-            "period_start": start,
-            "period_end_exclusive": end,
-            "areas": areas,
-            "refresh": refresh,
-            "results": results,
-        })
+        save_json(
+            root / "_runs" / f"{run_id}.json",
+            {
+                "run_id": run_id,
+                "started_at_utc": started_at,
+                "finished_at_utc": utc_now(),
+                "status": status,
+                "period_start": start,
+                "period_end_exclusive": end,
+                "areas": areas,
+                "refresh": refresh,
+                "results": results,
+            },
+        )
 
     return results

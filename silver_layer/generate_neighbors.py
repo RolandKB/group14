@@ -39,7 +39,8 @@ def load_geodata(path: Path) -> gpd.GeoDataFrame:
 
     with zipfile.ZipFile(path) as archive:
         geojson_files = [
-            name for name in archive.namelist()
+            name
+            for name in archive.namelist()
             if not name.endswith("/") and name.lower().endswith((".geojson", ".json"))
         ]
         if len(geojson_files) != 1:
@@ -47,7 +48,10 @@ def load_geodata(path: Path) -> gpd.GeoDataFrame:
 
         with tempfile.TemporaryDirectory() as directory:
             extracted = Path(directory) / "municipalities.geojson"
-            with archive.open(geojson_files[0]) as source, extracted.open("wb") as target:
+            with (
+                archive.open(geojson_files[0]) as source,
+                extracted.open("wb") as target,
+            ):
                 shutil.copyfileobj(source, target)
             return gpd.read_file(extracted)
 
@@ -80,7 +84,9 @@ def generate_neighbors(
     gdf = load_geodata(input_path)
     for column in (code_column, type_column):
         if column not in gdf.columns:
-            raise ValueError(f"Missing column {column!r}. Available: {list(gdf.columns)}")
+            raise ValueError(
+                f"Missing column {column!r}. Available: {list(gdf.columns)}"
+            )
 
     gdf = gdf.loc[gdf[type_column] == municipality_type].copy()
     gdf = gdf.loc[gdf.geometry.notna() & ~gdf.geometry.is_empty].copy()
@@ -91,7 +97,9 @@ def generate_neighbors(
 
     gdf["code"] = gdf[code_column].map(normalize_code)
     if gdf["code"].duplicated().any():
-        duplicates = sorted(gdf.loc[gdf["code"].duplicated(keep=False), "code"].unique())
+        duplicates = sorted(
+            gdf.loc[gdf["code"].duplicated(keep=False), "code"].unique()
+        )
         raise ValueError(f"Duplicate municipality codes: {duplicates}")
     if not gdf.geometry.is_valid.all():
         invalid = gdf.loc[~gdf.geometry.is_valid, "code"].tolist()
@@ -99,8 +107,12 @@ def generate_neighbors(
 
     polygons = gdf[["code", "geometry"]]
     touching = gpd.sjoin(
-        polygons, polygons, how="inner", predicate="touches",
-        lsuffix="left", rsuffix="right",
+        polygons,
+        polygons,
+        how="inner",
+        predicate="touches",
+        lsuffix="left",
+        rsuffix="right",
     )
 
     neighbors = {code: set() for code in polygons["code"]}
@@ -110,7 +122,9 @@ def generate_neighbors(
             neighbors[right].add(left)
 
     result = {code: sorted(neighbors[code]) for code in sorted(neighbors)}
-    if any(a not in result.get(b, []) for a, adjacent in result.items() for b in adjacent):
+    if any(
+        a not in result.get(b, []) for a, adjacent in result.items() for b in adjacent
+    ):
         raise ValueError("Neighbor symmetry check failed")
 
     if output is None:
@@ -131,8 +145,11 @@ def generate_neighbors(
         "coordinate_reference_system": str(gdf.crs),
         "adjacency_definition": "Geometries touch, including point-only contacts",
         "municipality_count": len(result),
-        "unique_adjacency_pair_count": sum(len(items) for items in result.values()) // 2,
-        "municipality_codes_without_neighbors": [code for code, items in result.items() if not items],
+        "unique_adjacency_pair_count": sum(len(items) for items in result.values())
+        // 2,
+        "municipality_codes_without_neighbors": [
+            code for code, items in result.items() if not items
+        ],
         "parameters": {
             "code_column": code_column,
             "type_column": type_column,

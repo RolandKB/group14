@@ -39,7 +39,11 @@ def inspect_zip(path):
         damaged = archive.testzip()
         if damaged:
             raise ValueError(f"Damaged ZIP member: {damaged}")
-        csv_files = [name for name in archive.namelist() if name.lower().endswith(".csv") and not name.endswith("/")]
+        csv_files = [
+            name
+            for name in archive.namelist()
+            if name.lower().endswith(".csv") and not name.endswith("/")
+        ]
     if not csv_files:
         raise ValueError(f"ZIP contains no CSV files: {path}")
     return csv_files
@@ -47,7 +51,9 @@ def inspect_zip(path):
 
 def write_json(path, data):
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    path.write_text(
+        json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
 
 
 def ingest_dataset(dataset, root=DEFAULT_ROOT, refresh=False, run_id=None):
@@ -62,9 +68,15 @@ def ingest_dataset(dataset, root=DEFAULT_ROOT, refresh=False, run_id=None):
     run_id = run_id or uuid4().hex
     directory = Path(root) / dataset
     directory.mkdir(parents=True, exist_ok=True)
-    source_url = f"https://api.elhub.no/energy-data/v0/{DATASETS[dataset]}?dataset={dataset}"
+    source_url = (
+        f"https://api.elhub.no/energy-data/v0/{DATASETS[dataset]}?dataset={dataset}"
+    )
     started = utc_now()
-    existing = sorted(directory.glob(f"{dataset}_*.zip"), key=lambda p: p.stat().st_mtime, reverse=True)
+    existing = sorted(
+        directory.glob(f"{dataset}_*.zip"),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
 
     archive_path = None
     status = "cached"
@@ -78,14 +90,18 @@ def ingest_dataset(dataset, root=DEFAULT_ROOT, refresh=False, run_id=None):
             for candidate in existing:
                 try:
                     inspect_zip(candidate)
-                    if sha256_file(candidate).startswith(candidate.stem.removeprefix(dataset + "_")):
+                    if sha256_file(candidate).startswith(
+                        candidate.stem.removeprefix(dataset + "_")
+                    ):
                         archive_path = candidate
                         break
                 except (ValueError, OSError, zipfile.BadZipFile):
                     continue
 
         if archive_path is None:
-            with tempfile.NamedTemporaryFile(dir=directory, prefix="download_", suffix=".tmp", delete=False) as temp:
+            with tempfile.NamedTemporaryFile(
+                dir=directory, prefix="download_", suffix=".tmp", delete=False
+            ) as temp:
                 temp_path = Path(temp.name)
             print(f"Downloading {dataset}...")
             with requests.get(source_url, stream=True, timeout=(15, 180)) as response:
@@ -114,24 +130,33 @@ def ingest_dataset(dataset, root=DEFAULT_ROOT, refresh=False, run_id=None):
         checksum = sha256_file(archive_path)
         metadata_path = directory / f"{archive_path.name}.metadata.json"
         if not metadata_path.exists():
-            match = re.search(r"(\d{4}-\d{2}-\d{2})-to-(\d{4}-\d{2}-\d{2})", original_name or "")
-            write_json(metadata_path, {
-                "dataset": dataset,
-                "source_url": source_url,
-                "final_url": final_url,
-                "original_filename": original_name,
-                "saved_filename": archive_path.name,
-                "sha256": checksum,
-                "size_bytes": archive_path.stat().st_size,
-                "csv_files": csv_files,
-                "advertised_period_start": match.group(1) if match else None,
-                "advertised_period_end": match.group(2) if match else None,
-                "period_verified": False,
-                "first_seen_utc": utc_now(),
-            })
+            match = re.search(
+                r"(\d{4}-\d{2}-\d{2})-to-(\d{4}-\d{2}-\d{2})", original_name or ""
+            )
+            write_json(
+                metadata_path,
+                {
+                    "dataset": dataset,
+                    "source_url": source_url,
+                    "final_url": final_url,
+                    "original_filename": original_name,
+                    "saved_filename": archive_path.name,
+                    "sha256": checksum,
+                    "size_bytes": archive_path.stat().st_size,
+                    "csv_files": csv_files,
+                    "advertised_period_start": match.group(1) if match else None,
+                    "advertised_period_end": match.group(2) if match else None,
+                    "period_verified": False,
+                    "first_seen_utc": utc_now(),
+                },
+            )
         result = {
-            "dataset": dataset, "status": status, "archive_path": str(archive_path),
-            "metadata_path": str(metadata_path), "csv_count": len(csv_files), "sha256": checksum,
+            "dataset": dataset,
+            "status": status,
+            "archive_path": str(archive_path),
+            "metadata_path": str(metadata_path),
+            "csv_count": len(csv_files),
+            "sha256": checksum,
         }
         print(f"{dataset}: {status} ({len(csv_files)} CSV files)")
         succeeded = True
@@ -141,11 +166,17 @@ def ingest_dataset(dataset, root=DEFAULT_ROOT, refresh=False, run_id=None):
             temp_path.unlink(missing_ok=True)
         # A failed ingestion must still propagate to the orchestrator.
         # Successful runs are logged separately from immutable archive metadata.
-        write_json(directory / "_runs" / f"{run_id}.json", {
-                "run_id": run_id, "started_at_utc": started, "finished_at_utc": utc_now(),
-                "dataset": dataset, "status": status if succeeded else "failed",
+        write_json(
+            directory / "_runs" / f"{run_id}.json",
+            {
+                "run_id": run_id,
+                "started_at_utc": started,
+                "finished_at_utc": utc_now(),
+                "dataset": dataset,
+                "status": status if succeeded else "failed",
                 "archive_path": str(archive_path) if archive_path else None,
-            })
+            },
+        )
 
 
 def ingest(root=DEFAULT_ROOT, refresh=False, run_id=None):

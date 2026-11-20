@@ -71,28 +71,56 @@ def ingest_all(bronze_root, start, end, refresh=False):
 
         run("elhub", elhub.ingest, root=bronze_root / "elhub", refresh=refresh)
 
-        run("sime", sime_municipalities.ingest,
-            root=bronze_root / "sime/municipalities", refresh=refresh)
-        run("spot_prices", spot_prices.ingest,
-            start=start, end=end, root=bronze_root / "spot_prices", refresh=refresh)
+        run(
+            "sime",
+            sime_municipalities.ingest,
+            root=bronze_root / "sime/municipalities",
+            refresh=refresh,
+        )
+        run(
+            "spot_prices",
+            spot_prices.ingest,
+            start=start,
+            end=end,
+            root=bronze_root / "spot_prices",
+            refresh=refresh,
+        )
 
-        run("frost_sources", frost_sources.ingest,
-            root=bronze_root / "frost/sources", refresh=refresh)
-        run("frost_series", frost_series.ingest,
-            start=start, end=end,
+        run(
+            "frost_sources",
+            frost_sources.ingest,
+            root=bronze_root / "frost/sources",
+            refresh=refresh,
+        )
+        run(
+            "frost_series",
+            frost_series.ingest,
+            start=start,
+            end=end,
             sources_file=bronze_root / "frost/sources/country=NO/response.json",
-            root=bronze_root / "frost/series", refresh=refresh)
-        run("frost_observations", frost_observations.ingest,
-            start=start, end=end, series_root=bronze_root / "frost/series",
-            root=bronze_root / "frost/observations", refresh=refresh)
+            root=bronze_root / "frost/series",
+            refresh=refresh,
+        )
+        run(
+            "frost_observations",
+            frost_observations.ingest,
+            start=start,
+            end=end,
+            series_root=bronze_root / "frost/series",
+            root=bronze_root / "frost/observations",
+            refresh=refresh,
+        )
     except Exception as exc:
         report["error"] = str(exc)
         report["status"] = "failed"
         raise
     finally:
-        report.setdefault("status", "partial" if any(
-            step["status"] != "success" for step in report["steps"].values()
-        ) else "success")
+        report.setdefault(
+            "status",
+            "partial"
+            if any(step["status"] != "success" for step in report["steps"].values())
+            else "success",
+        )
         report["finished_at_utc"] = datetime.now(timezone.utc).isoformat()
         output = bronze_root / "_runs" / f"{run_id}.json"
         save_json(output, report)
@@ -105,10 +133,14 @@ def ingest_all(bronze_root, start, end, refresh=False):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--bronze-root", type=Path, default=PROJECT_ROOT / "data/bronze")
+    parser.add_argument(
+        "--bronze-root", type=Path, default=PROJECT_ROOT / "data/bronze"
+    )
     parser.add_argument("--start", default="2024-01-01")
     parser.add_argument("--end", default="2026-01-01", help="Exclusive end date")
-    parser.add_argument("--refresh", action="store_true", help="Redownload cached API responses")
+    parser.add_argument(
+        "--refresh", action="store_true", help="Redownload cached API responses"
+    )
     args = parser.parse_args()
     if date.fromisoformat(args.start) >= date.fromisoformat(args.end):
         parser.error("--start must be earlier than --end")

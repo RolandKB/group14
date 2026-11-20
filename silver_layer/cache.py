@@ -32,7 +32,11 @@ def fingerprint(archive, version, start, end):
 def is_cached(output, expected):
     output = Path(output)
     manifest_path = output / MANIFEST_NAME
-    if not output.is_dir() or not (output / "_SUCCESS").is_file() or not manifest_path.is_file():
+    if (
+        not output.is_dir()
+        or not (output / "_SUCCESS").is_file()
+        or not manifest_path.is_file()
+    ):
         return False
     try:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -69,7 +73,9 @@ def publish(staging, output, manifest):
     payload = dict(manifest)
     payload["completed_at_utc"] = datetime.now(timezone.utc).isoformat()
     temporary_manifest = staging / (MANIFEST_NAME + ".tmp")
-    temporary_manifest.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+    temporary_manifest.write_text(
+        json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8"
+    )
     os.replace(temporary_manifest, staging / MANIFEST_NAME)
 
     backup = output.with_name(f".{output.name}.backup-{uuid.uuid4().hex}")

@@ -42,7 +42,10 @@ def latest_archive(bronze_root):
     if not archives:
         raise FileNotFoundError(f"No ZIP archive found in {directory}")
     if len(archives) > 1:
-        print(f"Found {len(archives)} archives. Using newest: {archives[0].name}", flush=True)
+        print(
+            f"Found {len(archives)} archives. Using newest: {archives[0].name}",
+            flush=True,
+        )
     return archives[0]
 
 
@@ -50,7 +53,11 @@ def extract_csvs(archive_path, target_dir):
     """Extract ZIP CSV filenames without modifying Bronze."""
     paths = []
     with zipfile.ZipFile(archive_path) as archive:
-        members = [member for member in archive.infolist()if not member.is_dir() and member.filename.lower().endswith(".csv")]
+        members = [
+            member
+            for member in archive.infolist()
+            if not member.is_dir() and member.filename.lower().endswith(".csv")
+        ]
         if not members:
             raise ValueError(f"No CSV members in {archive_path}")
         for index, member in enumerate(members):
@@ -62,15 +69,17 @@ def extract_csvs(archive_path, target_dir):
 
 
 def boundary_utc(date_text):
-    local = datetime.strptime(date_text, "%Y-%m-%d").replace(tzinfo=ZoneInfo("Europe/Oslo"))
+    local = datetime.strptime(date_text, "%Y-%m-%d").replace(
+        tzinfo=ZoneInfo("Europe/Oslo")
+    )
     return local.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
 
 
 def transform(raw, start="2024-01-01", end="2026-01-01"):
     """Return (valid Silver rows, invalid rows) for an all-string raw DataFrame.
 
-    Invalid rows are detected before filtering. 
-    
+    Invalid rows are detected before filtering.
+
     Rows outside the requested period are excluded.
     """
     if not set(COLUMNS).issubset(raw.columns):
@@ -90,9 +99,8 @@ def transform(raw, start="2024-01-01", end="2026-01-01"):
         F.to_timestamp("LAST_UPDATE_TIME", TIME_PATTERN).alias("last_update_time"),
     )
 
-    in_period = (
-        (F.col("start_time") >= F.lit(start_utc).cast("timestamp"))
-        & (F.col("start_time") < F.lit(end_utc).cast("timestamp"))
+    in_period = (F.col("start_time") >= F.lit(start_utc).cast("timestamp")) & (
+        F.col("start_time") < F.lit(end_utc).cast("timestamp")
     )
     # Keep rows with unparseable start times so validation can report them.
     candidates = df.where(in_period | F.col("start_time").isNull())
@@ -170,10 +178,13 @@ def ingest(
     try:
         with tempfile.TemporaryDirectory(prefix="dat535-elhub-municipality-") as tmp:
             paths = extract_csvs(archive, tmp)
-            print(f"Extracted {len(paths)} CSV files. Starting Spark transformation", flush=True)
-            schema = T.StructType([
-                T.StructField(column, T.StringType(), True) for column in COLUMNS
-            ])
+            print(
+                f"Extracted {len(paths)} CSV files. Starting Spark transformation",
+                flush=True,
+            )
+            schema = T.StructType(
+                [T.StructField(column, T.StringType(), True) for column in COLUMNS]
+            )
             raw = (
                 spark.read.option("header", "true")
                 .option("mode", "FAILFAST")
@@ -183,7 +194,9 @@ def ingest(
             silver, invalid = transform(raw, start=start, end=end)
             if invalid.limit(1).count():
                 invalid.show(10, truncate=False)
-                raise ValueError("Invalid Elhub rows found. Silver output not published")
+                raise ValueError(
+                    "Invalid Elhub rows found. Silver output not published"
+                )
 
             rows = silver.count()
             if rows == 0:
