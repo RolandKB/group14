@@ -104,9 +104,7 @@ def ingest_all(
 
                 report["steps"][name] = {
                     "status": result["status"],
-                    "seconds": round(
-                        (datetime.now(UTC) - started).total_seconds(), 2
-                    ),
+                    "seconds": round((datetime.now(UTC) - started).total_seconds(), 2),
                     "result": result,
                 }
 
@@ -115,9 +113,7 @@ def ingest_all(
             except Exception as exc:
                 report["steps"][name] = {
                     "status": "failed",
-                    "seconds": round(
-                        (datetime.now(UTC) - started).total_seconds(), 2
-                    ),
+                    "seconds": round((datetime.now(UTC) - started).total_seconds(), 2),
                     "error": str(exc),
                 }
                 raise
