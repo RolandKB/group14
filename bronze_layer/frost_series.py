@@ -31,7 +31,7 @@ def load_station_ids(sources_file=SOURCES_FILE):
     payload = json.loads(path.read_text(encoding="utf-8"))
     stations = payload.get("data")
     if not isinstance(stations, list):
-        raise ValueError("Sources JSON has no valid 'data' list")
+        raise TypeError("Sources JSON has no valid 'data' list")
     return sorted({row["id"] for row in stations if row.get("id")})
 
 
@@ -126,7 +126,7 @@ def ingest(
                     downloaded += 1
 
                 if not isinstance(payload.get("data"), list):
-                    raise ValueError("Cached series response has no valid data list")
+                    raise TypeError("Cached series response has no valid data list")
                 candidates = temperature_candidates(payload, start, end)
                 if candidates:
                     eligible += 1

@@ -108,7 +108,7 @@ def prepare(sime_payload, kartverket_codes, source_path):
     if not isinstance(sime_payload, dict) or not isinstance(
         sime_payload.get("kommuner"), list
     ):
-        raise ValueError("Invalid Sime JSON: expected a 'kommuner' array")
+        raise TypeError("Invalid Sime JSON: expected a 'kommuner' array")
 
     accepted, rejected = [], []
     records = sime_payload["kommuner"]

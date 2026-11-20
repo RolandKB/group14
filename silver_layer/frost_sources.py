@@ -101,7 +101,7 @@ def validate_station(row):
 
 def prepare(payload, path):
     if not isinstance(payload, dict) or not isinstance(payload.get("data"), list):
-        raise ValueError(f"Invalid Frost sources JSON structure: {path}")
+        raise TypeError(f"Invalid Frost sources JSON structure: {path}")
     accepted, rejected, seen = [], [], set()
     for item in payload["data"]:
         if not isinstance(item, dict):
