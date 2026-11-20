@@ -1,4 +1,4 @@
-name: Ceck code formatting
+name: Ruff
 
 on:
   pull_request:
@@ -6,7 +6,7 @@ on:
 
 jobs:
   format:
-    name: Check code formatting
+    name: Run Ruff format and lint
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -19,3 +19,9 @@ jobs:
       - name: Run code formatting
         run: |
           ruff format --check .
+
+      - name: Run linter
+        run: |
+          ruff check .
+
+      
