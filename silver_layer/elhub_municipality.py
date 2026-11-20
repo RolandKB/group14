@@ -148,11 +148,11 @@ def ingest(
     start="2024-01-01",
     end="2026-01-01",
     spark=None,
-    master=None,
-    driver_memory=None,
     run_id=None,
 ):
-    """Build or reuse Silver data, creating a Spark session if needed."""
+    if spark is None:
+        raise ValueError("Pass an existing SparkSession using spark=...")
+    spark.conf.set("spark.sql.session.timeZone", "UTC")
 
     archive = latest_archive(bronze_root)
     output = Path(silver_root) / "elhub" / OUTPUT_NAME
@@ -170,13 +170,8 @@ def ingest(
         print(json.dumps(result, indent=2), flush=True)
         return result
 
-    owns_spark = spark is None
     started = time.perf_counter()
     staging = cache.new_staging_directory(output)
-    if owns_spark:
-        spark = make_spark(master=master, driver_memory=driver_memory)
-    else:
-        spark.conf.set("spark.sql.session.timeZone", "UTC")
     try:
         with tempfile.TemporaryDirectory(prefix="dat535-elhub-municipality-") as tmp:
             paths = extract_csvs(archive, tmp)
@@ -231,5 +226,3 @@ def ingest(
     finally:
         if staging.exists():
             shutil.rmtree(staging)
-        if owns_spark:
-            spark.stop()
