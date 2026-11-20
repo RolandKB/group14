@@ -2,7 +2,7 @@
 
 import json
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
@@ -85,7 +85,7 @@ def ingest(root=DEFAULT_ROOT, refresh=False, run_id=None):
         "run_id": run_id,
         "status": "started",
         "url": URL,
-        "started_at_utc": datetime.now(timezone.utc).isoformat(),
+        "started_at_utc": datetime.now(UTC).isoformat(),
     }
 
     try:
@@ -117,7 +117,7 @@ def ingest(root=DEFAULT_ROOT, refresh=False, run_id=None):
         metadata = {
             "source": "Sime",
             "url": URL,
-            "retrieved_at_utc": datetime.now(timezone.utc).isoformat(),
+            "retrieved_at_utc": datetime.now(UTC).isoformat(),
             "run_id": run_id,
             "response_file": raw_path.name,
             "http_status": response.status_code,
@@ -135,7 +135,7 @@ def ingest(root=DEFAULT_ROOT, refresh=False, run_id=None):
         result.update(status="failed", error=str(exc))
         raise
     finally:
-        result["finished_at_utc"] = datetime.now(timezone.utc).isoformat()
+        result["finished_at_utc"] = datetime.now(UTC).isoformat()
         save_json(root / "_runs" / f"{run_id}.json", result)
 
     return result

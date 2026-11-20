@@ -5,10 +5,13 @@ import shutil
 import tempfile
 import time
 import zipfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
-from pyspark.sql import Window, functions as F, types as T
+
+from pyspark.sql import Window
+from pyspark.sql import functions as F
+from pyspark.sql import types as T
 
 from silver_layer import cache
 
@@ -73,7 +76,7 @@ def boundary_utc(date_text):
     local = datetime.strptime(date_text, "%Y-%m-%d").replace(
         tzinfo=ZoneInfo("Europe/Oslo")
     )
-    return local.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    return local.astimezone(UTC).strftime("%Y-%m-%d %H:%M:%S")
 
 
 def transform(raw, start="2024-01-01", end="2026-01-01"):

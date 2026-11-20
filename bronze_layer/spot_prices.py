@@ -2,7 +2,7 @@
 
 import json
 import time
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from uuid import uuid4
 
@@ -16,7 +16,7 @@ DEFAULT_ROOT = PROJECT_ROOT / "data" / "bronze" / "spot_prices"
 
 
 def utc_now():
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def save_json(path, data):

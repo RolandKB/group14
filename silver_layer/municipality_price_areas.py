@@ -8,6 +8,7 @@ from collections import Counter
 from pathlib import Path
 
 from pyspark.sql import types as T
+
 from silver_layer import cache
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent

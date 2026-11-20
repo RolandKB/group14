@@ -5,7 +5,7 @@ import json
 import shutil
 import tempfile
 import zipfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
@@ -138,7 +138,7 @@ def generate_neighbors(
         "dataset": DATASET,
         "source_file": str(input_path),
         "source_sha256": sha256_file(input_path),
-        "generated_at_utc": datetime.now(timezone.utc).isoformat(),
+        "generated_at_utc": datetime.now(UTC).isoformat(),
         "filename": output.name,
         "sha256": sha256_file(output),
         "size_bytes": output.stat().st_size,

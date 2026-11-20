@@ -2,13 +2,13 @@
 
 import json
 import os
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from pathlib import Path
 from uuid import uuid4
-from tqdm.auto import tqdm
 
 import requests
 from requests.adapters import HTTPAdapter
+from tqdm.auto import tqdm
 from urllib3.util.retry import Retry
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -152,7 +152,7 @@ def ingest(
 
     summary = {
         "run_id": run_id,
-        "finished_at_utc": datetime.now(timezone.utc).isoformat(),
+        "finished_at_utc": datetime.now(UTC).isoformat(),
         "period_start": start,
         "period_end_exclusive": end,
         "station_count": len(stations),

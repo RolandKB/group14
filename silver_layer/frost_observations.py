@@ -9,10 +9,11 @@ import hashlib
 import json
 import shutil
 import sys
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from pathlib import Path
 
-from pyspark.sql import functions as F, types as T
+from pyspark.sql import functions as F
+from pyspark.sql import types as T
 from tqdm.auto import tqdm
 
 from silver_layer import cache
@@ -337,7 +338,7 @@ def ingest(
                     "fingerprint": fingerprint,
                     "run_id": run_id,
                     "rows": count,
-                    "completed_at_utc": datetime.now(timezone.utc).isoformat(),
+                    "completed_at_utc": datetime.now(UTC).isoformat(),
                 }
                 (staging / cache.MANIFEST_NAME).write_text(
                     json.dumps(manifest, indent=2)

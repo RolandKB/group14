@@ -6,7 +6,7 @@ Run from the project root:
 
 import argparse
 import json
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from pathlib import Path
 from uuid import uuid4
 
@@ -48,7 +48,7 @@ def ingest_all(bronze_root, start, end, refresh=False):
         "run_id": run_id,
         "start": start,
         "end_exclusive": end,
-        "started_at_utc": datetime.now(timezone.utc).isoformat(),
+        "started_at_utc": datetime.now(UTC).isoformat(),
         "steps": {},
     }
 
@@ -121,7 +121,7 @@ def ingest_all(bronze_root, start, end, refresh=False):
             if any(step["status"] != "success" for step in report["steps"].values())
             else "success",
         )
-        report["finished_at_utc"] = datetime.now(timezone.utc).isoformat()
+        report["finished_at_utc"] = datetime.now(UTC).isoformat()
         output = bronze_root / "_runs" / f"{run_id}.json"
         save_json(output, report)
         print(f"\nBronze run: {report['status']} | Report: {output}", flush=True)
