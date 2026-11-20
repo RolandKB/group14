@@ -67,6 +67,32 @@ jobs:
           python -m bronze_layer.ingest_all --bronze-root "$BRONZE_ROOT" \
             2>&1 | tee "$BRONZE_ROOT/_logs/dev-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.log"
 
+      - name: Run Silver ingestion
+        env:
+          BRONZE_ROOT: ${{ steps.output-dir.outputs.dir }}/bronze
+          SILVER_ROOT: ${{ steps.output-dir.outputs.dir }}/silver
+        run: |
+          set -euo pipefail
+          source ~/spark-env/bin/activate
+          mkdir -p "$SILVER_ROOT/_logs"
+          python -m silver_layer.ingest_all \
+            --bronze-root "$BRONZE_ROOT" \
+            --silver-root "$SILVER_ROOT" \
+            --master 'local[2]' \
+            --driver-memory 6g \
+            2>&1 | tee "$SILVER_ROOT/_logs/dev-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.log"
+
+      - name: Upload Silver reports and log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: dev-silver-reports-${{ github.run_number }}-${{ github.run_attempt }}
+          path: |
+            ${{ steps.output-dir.outputs.dir }}/silver/_runs/*.json
+            ${{ steps.output-dir.outputs.dir }}/silver/_logs/dev-${{ github.run_id }}-${{ github.run_attempt }}.log
+          retention-days: 7
+          if-no-files-found: ignore
+
       - name: Upload ingestion reports and log
         if: always()
         uses: actions/upload-artifact@v7
