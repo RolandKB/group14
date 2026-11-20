@@ -2,7 +2,7 @@
 
 import argparse
 import json
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from pathlib import Path
 from uuid import uuid4
 
@@ -54,7 +54,7 @@ def ingest_all(
         "end_exclusive": end,
         "spark_master": master,
         "spark_driver_memory": driver_memory,
-        "started_at_utc": datetime.now(timezone.utc).isoformat(),
+        "started_at_utc": datetime.now(UTC).isoformat(),
         "steps": {},
     }
 
@@ -80,7 +80,7 @@ def ingest_all(
 
         for name, function in steps:
             print(f"\n=== Silver: {name} ===", flush=True)
-            started = datetime.now(timezone.utc)
+            started = datetime.now(UTC)
             try:
                 result = function(
                     bronze_root=bronze_root,
@@ -104,9 +104,7 @@ def ingest_all(
 
                 report["steps"][name] = {
                     "status": result["status"],
-                    "seconds": round(
-                        (datetime.now(timezone.utc) - started).total_seconds(), 2
-                    ),
+                    "seconds": round((datetime.now(UTC) - started).total_seconds(), 2),
                     "result": result,
                 }
 
@@ -115,9 +113,7 @@ def ingest_all(
             except Exception as exc:
                 report["steps"][name] = {
                     "status": "failed",
-                    "seconds": round(
-                        (datetime.now(timezone.utc) - started).total_seconds(), 2
-                    ),
+                    "seconds": round((datetime.now(UTC) - started).total_seconds(), 2),
                     "error": str(exc),
                 }
                 raise
@@ -131,7 +127,7 @@ def ingest_all(
         raise
 
     finally:
-        report["finished_at_utc"] = datetime.now(timezone.utc).isoformat()
+        report["finished_at_utc"] = datetime.now(UTC).isoformat()
         save_report(report_path, report)
         print(
             f"\nSilver pipeline: {report['status']} | Report: {report_path}", flush=True

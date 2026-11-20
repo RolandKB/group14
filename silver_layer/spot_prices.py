@@ -5,10 +5,12 @@ import json
 import os
 import shutil
 import uuid
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
-from pyspark.sql import functions as F, types as T
+
+from pyspark.sql import functions as F
+from pyspark.sql import types as T
 
 from silver_layer import cache
 
@@ -113,7 +115,7 @@ def source_fingerprint(files, start, end):
 def local_boundary_utc(day):
     return datetime.combine(
         date.fromisoformat(day), datetime.min.time(), tzinfo=ZoneInfo("Europe/Oslo")
-    ).astimezone(timezone.utc)
+    ).astimezone(UTC)
 
 
 def _parsed(raw):
@@ -283,7 +285,7 @@ def _publish_pair(
 
             # Empty quarantine output is allowed; Spark still writes _SUCCESS.
             payload = dict(manifest)
-            payload["completed_at_utc"] = datetime.now(timezone.utc).isoformat()
+            payload["completed_at_utc"] = datetime.now(UTC).isoformat()
             (staging / cache.MANIFEST_NAME).write_text(
                 json.dumps(payload, indent=2, sort_keys=True)
             )

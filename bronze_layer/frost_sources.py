@@ -2,11 +2,11 @@
 
 import json
 import os
-from datetime import datetime, timezone
-from pathlib import Path
 import uuid
-import requests
+from datetime import UTC, datetime
 from pathlib import Path
+
+import requests
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_OUTPUT = PROJECT_ROOT / "data" / "bronze" / "frost" / "sources"
@@ -74,7 +74,7 @@ def ingest(root=DEFAULT_OUTPUT, refresh=False, run_id=None):
 
     result = {
         "run_id": run_id,
-        "finished_at_utc": datetime.now(timezone.utc).isoformat(),
+        "finished_at_utc": datetime.now(UTC).isoformat(),
         "status": status,
         "station_count": len(station_ids),
         "station_ids": station_ids,

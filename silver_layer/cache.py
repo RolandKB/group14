@@ -5,7 +5,7 @@ import json
 import os
 import shutil
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 MANIFEST_NAME = "_silver_manifest.json"
@@ -71,7 +71,7 @@ def publish(staging, output, manifest):
     if not (staging / "_SUCCESS").is_file() or not any(staging.glob("*.parquet")):
         raise ValueError(f"Incomplete Spark output: {staging}")
     payload = dict(manifest)
-    payload["completed_at_utc"] = datetime.now(timezone.utc).isoformat()
+    payload["completed_at_utc"] = datetime.now(UTC).isoformat()
     temporary_manifest = staging / (MANIFEST_NAME + ".tmp")
     temporary_manifest.write_text(
         json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8"
