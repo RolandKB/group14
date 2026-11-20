@@ -1,278 +1,150 @@
-"""Run the Bronze workflow: Elhub, municipality references, Frost temperature, and spot prices."""
+"""Run all Bronze ingestions using their existing caches.
+
+Run from the project root:
+    python -m bronze_layer.ingest_all --bronze-root data/bronze
+"""
 
 import argparse
 import json
-import logging
+from datetime import date, datetime, timezone
 from pathlib import Path
+from uuid import uuid4
 
-if __package__ in (None, ""):
-    import sys
-
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-
-from bronze_layer.discover_municipalities import discover
-from bronze_layer.frost_common import PROJECT_ROOT, frost_session, now, validate_period
-from bronze_layer.generate_neighbors import generate_neighbors
-from bronze_layer.ingest_elhub import ingest as ingest_elhub
-from bronze_layer.ingest_frost_observations import ingest as ingest_observations
-from bronze_layer.ingest_frost_series import ingest as ingest_series
-from bronze_layer.ingest_frost_sources import ingest as ingest_sources
-from bronze_layer.ingest_spot_prices import PRICE_AREAS
-from bronze_layer.ingest_spot_prices import ingest as ingest_prices
-from common.runs import new_run_id
-from common.storage import write_json
-
-LOG = logging.getLogger(__name__)
-DEFAULT_GEODATA = (
-    Path(__file__).resolve().parent / "Basisdata_0000_Norge_25833_Kommuner_GeoJSON.zip"
+from bronze_layer import (
+    elhub,
+    frost_observations,
+    frost_series,
+    frost_sources,
+    sime_municipalities,
+    spot_prices,
 )
 
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
-def main(argv=None):
+
+def save_json(path, data):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, indent=2, default=str) + "\n", encoding="utf-8")
+
+
+def has_failures(result):
+    """Our ingestion modules use slightly different failure field names."""
+    if not isinstance(result, dict):
+        return False
+    return bool(
+        result.get("failed_count", 0)
+        or result.get("failed")
+        or result.get("failures")
+        or result.get("status") in ("partial", "failed")
+        or (isinstance(result.get("results"), dict) and has_failures(result["results"]))
+    )
+
+
+def ingest_all(bronze_root, start, end, refresh=False):
+    """Run independent sources first, then Frost sources -> series -> observations."""
+    bronze_root = Path(bronze_root).resolve()
+    run_id = uuid4().hex
+    report = {
+        "run_id": run_id,
+        "start": start,
+        "end_exclusive": end,
+        "started_at_utc": datetime.now(timezone.utc).isoformat(),
+        "steps": {},
+    }
+
+    def run(name, function, **kwargs):
+        print(f"\n=== {name} ===", flush=True)
+        try:
+            result = function(run_id=run_id, **kwargs)
+            status = "partial" if has_failures(result) else "success"
+            report["steps"][name] = {"status": status, "result": result}
+            print(f"{name}: {status}", flush=True)
+        except Exception as exc:
+            report["steps"][name] = {"status": "failed", "error": str(exc)}
+            raise
+
+    try:
+        # The Kartverket ZIP is downloaded manually; neighbors are generated in Silver.
+        kartverket = bronze_root / "kartverket"
+        if not any(kartverket.glob("*.zip")) and not any(kartverket.glob("*.geojson")):
+            raise FileNotFoundError(f"No Kartverket ZIP or GeoJSON in {kartverket}")
+
+        run("elhub", elhub.ingest, root=bronze_root / "elhub", refresh=refresh)
+
+        run(
+            "sime",
+            sime_municipalities.ingest,
+            root=bronze_root / "sime/municipalities",
+            refresh=refresh,
+        )
+        run(
+            "spot_prices",
+            spot_prices.ingest,
+            start=start,
+            end=end,
+            root=bronze_root / "spot_prices",
+            refresh=refresh,
+        )
+
+        run(
+            "frost_sources",
+            frost_sources.ingest,
+            root=bronze_root / "frost/sources",
+            refresh=refresh,
+        )
+        run(
+            "frost_series",
+            frost_series.ingest,
+            start=start,
+            end=end,
+            sources_file=bronze_root / "frost/sources/country=NO/response.json",
+            root=bronze_root / "frost/series",
+            refresh=refresh,
+        )
+        run(
+            "frost_observations",
+            frost_observations.ingest,
+            start=start,
+            end=end,
+            series_root=bronze_root / "frost/series",
+            root=bronze_root / "frost/observations",
+            refresh=refresh,
+        )
+    except Exception as exc:
+        report["error"] = str(exc)
+        report["status"] = "failed"
+        raise
+    finally:
+        report.setdefault(
+            "status",
+            "partial"
+            if any(step["status"] != "success" for step in report["steps"].values())
+            else "success",
+        )
+        report["finished_at_utc"] = datetime.now(timezone.utc).isoformat()
+        output = bronze_root / "_runs" / f"{run_id}.json"
+        save_json(output, report)
+        print(f"\nBronze run: {report['status']} | Report: {output}", flush=True)
+
+    if report["status"] != "success":
+        raise SystemExit(1)
+    return report
+
+
+def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--bronze-root", type=Path, default=PROJECT_ROOT / "data/bronze"
     )
+    parser.add_argument("--start", default="2024-01-01")
+    parser.add_argument("--end", default="2026-01-01", help="Exclusive end date")
     parser.add_argument(
-        "--municipality-archive",
-        type=Path,
-        help="Optional municipality-level Elhub ZIP; restrict Frost to its municipalities",
+        "--refresh", action="store_true", help="Redownload cached API responses"
     )
-    parser.add_argument(
-        "--geodata",
-        type=Path,
-        default=DEFAULT_GEODATA,
-        help="Kartverket ZIP or GeoJSON for municipality neighbors",
-    )
-
-    parser.add_argument("--start-date", default="2024-01-01")
-    parser.add_argument("--end-date", default="2026-01-01", help="Exclusive end date")
-
-    parser.add_argument("--skip-elhub", action="store_true")
-    parser.add_argument("--skip-neighbors", action="store_true")
-    parser.add_argument("--skip-observations", action="store_true")
-    parser.add_argument("--skip-prices", action="store_true")
-
-    parser.add_argument("--refresh-sources", action="store_true")
-    parser.add_argument("--refresh-series", action="store_true")
-    parser.add_argument("--refresh-observations", action="store_true")
-    parser.add_argument("--refresh-prices", action="store_true")
-    parser.add_argument(
-        "--price-areas", nargs="+", choices=PRICE_AREAS, default=PRICE_AREAS
-    )
-
-    parser.add_argument(
-        "--max-stations",
-        type=int,
-        default=0,
-        help="Pilot limit; 0 means all eligible stations",
-    )
-    parser.add_argument(
-        "--allow-partial",
-        action="store_true",
-        help="Exit successfully despite failed source requests",
-    )
-    args = parser.parse_args(argv)
-
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s: %(message)s",
-    )
-
-    # Validate configuration before starting any downloads.
-    try:
-        validate_period(args.start_date, args.end_date)
-    except ValueError as exc:
-        parser.error(str(exc))
-
-    if args.max_stations < 0:
-        parser.error("--max-stations must be nonnegative")
-
-    if args.municipality_archive and not args.municipality_archive.is_file():
-        parser.error(f"Municipality archive not found: {args.municipality_archive}")
-
-    if not args.skip_neighbors and not args.geodata.is_file():
-        parser.error(
-            f"Geodata not found: {args.geodata}; supply --geodata or --skip-neighbors"
-        )
-
-    # Fail before a potentially large Elhub download if credentials are missing.
-    with frost_session():
-        pass
-
-    # Paths must be converted to strings before saving configuration as JSON.
-    configuration = {}
-    for name, value in vars(args).items():
-        if isinstance(value, Path):
-            value = str(value)
-        configuration[name] = value
-
-    run_id = new_run_id()
-    summary = {
-        "run_id": run_id,
-        "started_at_utc": now(),
-        "status": "started",
-        "period_start": args.start_date,
-        "period_end_exclusive": args.end_date,
-        "configuration": configuration,
-    }
-    manifest = args.bronze_root / "_runs" / f"{run_id}.json"
-    LOG.info(
-        "Bronze run %s: %s to %s; output=%s; manifest=%s",
-        run_id,
-        args.start_date,
-        args.end_date,
-        args.bronze_root.resolve(),
-        manifest,
-    )
-
-    try:
-        if not args.skip_elhub:
-            LOG.info("Starting Elhub ingestion")
-            archive = ingest_elhub(args.bronze_root / "elhub", run_id=run_id)
-            summary["elhub_archive"] = str(archive)
-
-        if not args.skip_neighbors:
-            LOG.info("Generating municipality neighbors from %s", args.geodata)
-            generate_neighbors(
-                args.geodata, bronze_root=args.bronze_root, run_id=run_id
-            )
-
-        # Without a municipality archive, discover stations throughout Norway.
-        codes = None
-        if args.municipality_archive:
-            codes = discover(args.municipality_archive, run_id=run_id)
-            if not codes:
-                raise ValueError("Municipality archive contains no municipality codes")
-            write_json(args.bronze_root / "elhub/municipalities.json", codes)
-
-        # Country-wide discovery includes historical stations whose municipality
-        # codes may no longer appear in the current Kartverket dataset.
-        LOG.info("Starting Frost station discovery")
-        source_result = ingest_sources(
-            codes,
-            root=args.bronze_root / "frost/sources",
-            refresh=args.refresh_sources,
-            run_id=run_id,
-        )
-
-        # A station may appear in several results. Download it only once.
-        station_ids = set()
-        for result in source_result.values():
-            for station_id in result["station_ids"]:
-                station_ids.add(station_id)
-        stations = sorted(station_ids)
-
-        LOG.info("Starting Frost series discovery for %d stations", len(stations))
-        series_result = ingest_series(
-            stations,
-            args.start_date,
-            args.end_date,
-            root=args.bronze_root / "frost/series",
-            refresh=args.refresh_series,
-            run_id=run_id,
-        )
-
-        # Only request observations from stations with relevant temperature series.
-        eligible = []
-        for station_id, result in series_result.items():
-            if result["candidates"]:
-                eligible.append(station_id)
-        eligible.sort()
-
-        # Keep the full count for reporting, even when running a small pilot.
-        total_eligible = len(eligible)
-        if args.max_stations:
-            eligible = eligible[: args.max_stations]
-
-        write_json(args.bronze_root / "frost/eligible-stations.json", eligible)
-        LOG.info("%d eligible stations; downloading %d", total_eligible, len(eligible))
-
-        observations = None
-        if not args.skip_observations:
-            observations = ingest_observations(
-                eligible,
-                args.start_date,
-                args.end_date,
-                root=args.bronze_root / "frost/observations",
-                refresh=args.refresh_observations,
-                run_id=run_id,
-            )
-
-        # Prices use the same date range, with one request per area and day.
-        prices = None
-        if not args.skip_prices:
-            LOG.info("Starting spot-price ingestion")
-            prices = ingest_prices(
-                args.start_date,
-                args.end_date,
-                root=args.bronze_root / "spot_prices",
-                areas=args.price_areas,
-                refresh=args.refresh_prices,
-                run_id=run_id,
-            )
-
-        # Collect failed requests so a later run can be inspected and resumed.
-        source_failures = []
-        for source, result in source_result.items():
-            if result["status"] == "failed":
-                source_failures.append(source)
-
-        series_failures = []
-        for station_id, result in series_result.items():
-            if result["status"] == "failed":
-                series_failures.append(station_id)
-
-        municipalities = "all Norway"
-        if codes is not None:
-            municipalities = len(codes)
-
-        summary.update(
-            {
-                "municipalities": municipalities,
-                "station_ids": len(stations),
-                "eligible_stations": total_eligible,
-                "selected_stations": len(eligible),
-                "source_failures": source_failures,
-                "series_failures": series_failures,
-                "observations": observations,
-                "prices": prices,
-            }
-        )
-
-        failed = bool(source_failures or series_failures or not eligible)
-        if observations and observations["failed"]:
-            failed = True
-
-        if prices and prices["failed"]:
-            failed = True
-
-        if failed:
-            summary["status"] = "partial"
-        else:
-            summary["status"] = "success"
-
-    except BaseException as exc:
-        # Record interruptions (such as Ctrl+C) as well as ordinary errors.
-        summary.update(status="failed", error=str(exc), error_type=type(exc).__name__)
-        raise
-    finally:
-        # Save a manifest even if a stage fails or the user interrupts the run.
-        summary["finished_at_utc"] = now()
-        write_json(manifest, summary)
-        LOG.info(
-            "Bronze run %s finished: %s; manifest=%s",
-            run_id,
-            summary["status"],
-            manifest,
-        )
-
-    print(json.dumps(summary, indent=2))
-
-    if failed and not args.allow_partial:
-        raise SystemExit(
-            "Requests failed or no eligible stations found; inspect the run manifest and rerun"
-        )
+    args = parser.parse_args()
+    if date.fromisoformat(args.start) >= date.fromisoformat(args.end):
+        parser.error("--start must be earlier than --end")
+    ingest_all(args.bronze_root, args.start, args.end, args.refresh)
 
 
 if __name__ == "__main__":

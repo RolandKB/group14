@@ -5,26 +5,25 @@ description = "DAT535 Group 14 Project"
 readme = "README.md"
 authors = [
     { name = "Magnus GJerlaugsen", email = "magje5109@uis.no" },
-    { name = "Roland Berge", email = "roland.berge@stud.uis.no" }
+    { name = "Roland Berge", email = "ro.berge@stud.uis.no" }
 ]
 requires-python = ">=3.11"
 dependencies = [
     "findspark>=2.0.1",
     "geopandas>=1.2.0",
     "pandas>=3.1.1",
-    "pyspark>=4.3.0",
+    "pyspark==3.5.0",
     "python-dotenv>=1.2.4",
     "requests>=2.34.2",
     "shapely>=2.2.0",
+    "tqdm==4.70.1"
 ]
 
 [tool.setuptools]
 packages = [
-    "notebooks",
     "bronze_layer",
     "silver_layer",
     "gold_layer",
-    "common"
 ]
 
 [dependency-groups]
