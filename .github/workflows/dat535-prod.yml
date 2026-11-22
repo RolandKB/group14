@@ -4,23 +4,24 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
-    inputs:
-      lab:
-        description: Lab to run
-        required: true
-        default: all
-        type: choice
-        options: [all, lab2, lab3]
+
+# Bronze, Silver and Gold
+concurrency:
+  group: dat535-prod-pipeline
+  cancel-in-progress: false
 
 jobs:
-  deploy-prod:
-    name: Deploy to Production
+  run-prod:
+    name: Run Production Pipeline
     runs-on: self-hosted
     environment: main
+    timeout-minutes: 1200
     env:
+      FROST_CLIENT_ID: ${{ secrets.FROST_CLIENT_ID }}
       DAT535_ENV: prod
       SPARK_HOME: /opt/spark
       JAVA_HOME: /usr/lib/jvm/java-8-openjdk-amd64
+      PYTHONUNBUFFERED: "1"
 
     steps:
       - name: Checkout code
@@ -28,34 +29,91 @@ jobs:
 
       - name: Resolve output directory
         id: output-dir
-        # Persistent, non-tmp path: survives runner reboots/tmpfiles cleanup, unlike /tmp
-        run: echo "dir=$HOME/spark-lab-data/prod" >> "$GITHUB_OUTPUT"
+        # Keep production data and caches outside the checkout.
+        run: echo "dir=$HOME/dat535-volume/prod" >> "$GITHUB_OUTPUT"
 
-      - name: Run Production Pipeline
-        env:
-          DAT535_OUTPUT_DIR: ${{ steps.output-dir.outputs.dir }}
+      - name: Install dependencies
         run: |
+          set -euo pipefail
           source ~/spark-env/bin/activate
-          mkdir -p "$DAT535_OUTPUT_DIR"
-          
-          LAB_TO_RUN="${{ github.event.inputs.lab || 'all' }}"
-          echo "=== Running Production Pipeline ($LAB_TO_RUN) ==="
-          python $GITHUB_WORKSPACE/run_pipeline.py $LAB_TO_RUN
+          python -m pip install -e .
 
-      - name: Upload Production artifacts
+      - name: Prepare Kartverket data
+        env:
+          BRONZE_ROOT: ${{ steps.output-dir.outputs.dir }}/bronze
+        run: |
+          set -euo pipefail
+          SOURCE="data/bronze/kartverket/Basisdata_0000_Norge_25833_Kommuner_GeoJSON.zip"
+          TARGET="$BRONZE_ROOT/kartverket"
+          test -f "$SOURCE" || { echo "Kartverket ZIP not found: $SOURCE"; exit 1; }
+          mkdir -p "$TARGET"
+          cp "$SOURCE" "$TARGET/"
+
+      - name: Run Bronze ingestion
+        env:
+          BRONZE_ROOT: ${{ steps.output-dir.outputs.dir }}/bronze
+        run: |
+          set -euo pipefail
+          source ~/spark-env/bin/activate
+          mkdir -p "$BRONZE_ROOT/_logs"
+          python -m bronze_layer.ingest_all --bronze-root "$BRONZE_ROOT" \
+            2>&1 | tee "$BRONZE_ROOT/_logs/prod-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.log"
+
+      - name: Run Silver ingestion
+        env:
+          BRONZE_ROOT: ${{ steps.output-dir.outputs.dir }}/bronze
+          SILVER_ROOT: ${{ steps.output-dir.outputs.dir }}/silver
+        run: |
+          set -euo pipefail
+          source ~/spark-env/bin/activate
+          mkdir -p "$SILVER_ROOT/_logs"
+          python -m silver_layer.ingest_all \
+            --bronze-root "$BRONZE_ROOT" \
+            --silver-root "$SILVER_ROOT" \
+            --master 'local[2]' \
+            --driver-memory 6g \
+            2>&1 | tee "$SILVER_ROOT/_logs/prod-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.log"
+
+      - name: Run Gold ingestion
+        env:
+          SILVER_ROOT: ${{ steps.output-dir.outputs.dir }}/silver
+          GOLD_ROOT: ${{ steps.output-dir.outputs.dir }}/gold
+        run: |
+          set -euo pipefail
+          source ~/spark-env/bin/activate
+          mkdir -p "$GOLD_ROOT/_logs"
+          python -m gold_layer.ingest_all \
+            --silver-root "$SILVER_ROOT" \
+            --gold-root "$GOLD_ROOT" \
+            --master 'local[2]' \
+            --driver-memory 6g \
+            2>&1 | tee "$GOLD_ROOT/_logs/prod-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.log"
+
+      - name: Upload production reports and logs
+        if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: prod-outputs-${{ github.run_number }}
-          path: ${{ steps.output-dir.outputs.dir }}/
+          name: prod-reports-${{ github.run_number }}-${{ github.run_attempt }}
+          path: |
+            ${{ steps.output-dir.outputs.dir }}/bronze/_runs/*.json
+            ${{ steps.output-dir.outputs.dir }}/bronze/elhub/**/_runs/*.json
+            ${{ steps.output-dir.outputs.dir }}/bronze/frost/**/_runs/*.json
+            ${{ steps.output-dir.outputs.dir }}/bronze/_logs/prod-${{ github.run_id }}-${{ github.run_attempt }}.log
+            ${{ steps.output-dir.outputs.dir }}/silver/_runs/*.json
+            ${{ steps.output-dir.outputs.dir }}/silver/_logs/prod-${{ github.run_id }}-${{ github.run_attempt }}.log
+            ${{ steps.output-dir.outputs.dir }}/gold/_runs/gold-${{ github.run_id }}-${{ github.run_attempt }}.json
+            ${{ steps.output-dir.outputs.dir }}/gold/_logs/prod-${{ github.run_id }}-${{ github.run_attempt }}.log
           retention-days: 30
           if-no-files-found: ignore
 
       - name: Write pipeline summary
+        if: always()
         run: |
-          echo "## Production Pipeline Run" >> $GITHUB_STEP_SUMMARY
-          echo "| Key | Value |" >> $GITHUB_STEP_SUMMARY
-          echo "|-----|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Run # | ${{ github.run_number }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Lab | ${{ github.event.inputs.lab || 'all' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Triggered by | ${{ github.actor }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Branch | ${{ github.ref_name }} |" >> $GITHUB_STEP_SUMMARY
+          echo "## Production Pipeline Run" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Key | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|-----|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Run # | ${{ github.run_number }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Status | ${{ job.status }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Triggered by | ${{ github.actor }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Branch | ${{ github.ref_name }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Output | ~/dat535-volume/prod |" >> "$GITHUB_STEP_SUMMARY"

@@ -82,6 +82,32 @@ jobs:
             --driver-memory 6g \
             2>&1 | tee "$SILVER_ROOT/_logs/dev-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.log"
 
+      - name: Run Gold ingestion
+        env:
+          SILVER_ROOT: ${{ steps.output-dir.outputs.dir }}/silver
+          GOLD_ROOT: ${{ steps.output-dir.outputs.dir }}/gold
+        run: |
+          set -euo pipefail
+          source ~/spark-env/bin/activate
+          mkdir -p "$GOLD_ROOT/_logs"
+          python -m gold_layer.ingest_all \
+            --silver-root "$SILVER_ROOT" \
+            --gold-root "$GOLD_ROOT" \
+            --master 'local[2]' \
+            --driver-memory 6g \
+            2>&1 | tee "$GOLD_ROOT/_logs/dev-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.log"
+
+      - name: Upload Gold reports and log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: dev-gold-reports-${{ github.run_number }}-${{ github.run_attempt }}
+          path: |
+            ${{ steps.output-dir.outputs.dir }}/gold/_runs/gold-${{ github.run_id }}-${{ github.run_attempt }}.json
+            ${{ steps.output-dir.outputs.dir }}/gold/_logs/dev-${{ github.run_id }}-${{ github.run_attempt }}.log
+          retention-days: 7
+          if-no-files-found: ignore
+
       - name: Upload Silver reports and log
         if: always()
         uses: actions/upload-artifact@v7
