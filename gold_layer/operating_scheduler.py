@@ -46,14 +46,14 @@ def find_cheapest_window(
         or duration_hours < 1
     ):
         raise ValueError("duration_hours must be a positive integer")
-    
+
     power = Decimal(str(power_kw))
     if not power.is_finite() or power <= 0:
         raise ValueError("power_kw must be a positive finite number")
-    
+
     if first >= last:
         raise ValueError("earliest_start must precede latest_end")
-    
+
     if (
         first.minute
         or first.second
@@ -67,46 +67,46 @@ def find_cheapest_window(
     # Keep only unique valid hourly slots.
     slots = {}
     duplicates = set()
-    
+
     for row in prices:
         start = row["start_time"]
         end = row["end_time"]
         price = row["nok_per_kwh"]
-        
+
         if start is None or end is None or price is None:
             continue
-        
+
         if start.tzinfo is None:
             start = start.replace(tzinfo=UTC)  # PySpark UTC timestamp
-        
+
         if end.tzinfo is None:
             end = end.replace(tzinfo=UTC)
-        
+
         start, end = _utc(start), _utc(end)
         if end - start != HOUR or start < first or end > last:
             continue
-        
+
         amount = Decimal(str(price))
         if not amount.is_finite():
             continue
-        
+
         if start in slots:
             duplicates.add(start)
         else:
             slots[start] = amount
-    
+
     for start in duplicates:
         slots.pop(start, None)
 
     best = None
     current = first
-    
+
     while current + duration_hours * HOUR <= last:
         hours = [current + i * HOUR for i in range(duration_hours)]
-        
+
         if all(hour in slots for hour in hours):
             cost = sum((slots[hour] * power for hour in hours), Decimal(0))
-            
+
             # Strictly cheaper only.
             if best is None or cost < best.estimated_cost_nok:
                 best = Schedule(
@@ -146,7 +146,7 @@ def recommend(prices_df, area, local_start, local_end, duration_hours, power_kw)
     print(f"Area: {area} | Allowed: {local_start} to {local_end}")
     print(f"Device: {power_kw} kW for {duration_hours} consecutive hours")
     print("Available price slots:", len(selected))
-    
+
     if result is None:
         print("No complete operating window: missing prices or insufficient time.")
     else:
